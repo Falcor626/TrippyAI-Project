@@ -5,8 +5,11 @@ This capstone project is a Travel Website using React that utilizes AI Agents to
 ## Developers
 
 David Barrios
+
 Daniel Marinca
+
 Dean Martin Solideo
+
 Aidan Wallis
 
 ### `npm start`
