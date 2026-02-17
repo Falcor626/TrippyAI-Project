@@ -11,10 +11,8 @@ function App() {
 
   return (
     <div className="App">
-      <button onClick={toggleForm}>
-        {showLogin ? 'Switch to Sign Up' : 'Switch to Login'}
-      </button>
-      {showLogin ? <Login /> : <SignUp />}
+      <h1 className="app-title">TrippyAI</h1>
+      {showLogin ? <Login toggleForm={toggleForm} /> : <SignUp toggleForm={toggleForm} />}
     </div>
   );
 }

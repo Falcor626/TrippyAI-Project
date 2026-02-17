@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../supabaseClient';
 
-function SignUp() {
+function SignUp({ toggleForm }) {
     const [email, setEmail] = useState('');
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -137,9 +137,14 @@ function SignUp() {
                             disabled={loading}
                         />
                     </div>
-                    <button type="submit" disabled={loading}>
-                        {loading ? 'Creating Account...' : 'Sign Up'}
-                    </button>
+                    <div className="button-group">
+                        <button type="submit" disabled={loading}>
+                            {loading ? 'Creating Account...' : 'Sign Up'}
+                        </button>
+                        <button type="button" className="secondary-button" onClick={toggleForm}>
+                            Back to Login
+                        </button>
+                    </div>
                 </form>
             </div>
 

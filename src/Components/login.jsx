@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-function Login() {
+function Login({ toggleForm }) {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
 
@@ -39,7 +39,12 @@ function Login() {
                         required
                     />
                 </div>
-                <button type="submit">Submit</button>
+                <div className="button-group">
+                    <button type="submit">Submit</button>
+                    <button type="button" className="secondary-button" onClick={toggleForm}>
+                        Sign Up
+                    </button>
+                </div>
             </form>
         </div>
     );

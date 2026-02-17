@@ -16,6 +16,14 @@ code {
   text-align: center;
 }
 
+.app-title {
+  font-size: 42px;
+  font-weight: 700;
+  margin: 30px 0 40px 0;
+  color: #3a6ea5;
+  letter-spacing: 1px;
+}
+
 .App-logo {
   height: 40vmin;
   pointer-events: none;
@@ -113,6 +121,40 @@ code {
   background: #9ca3af;
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+.button-group {
+  display: flex;
+  gap: 12px;
+}
+
+.button-group button {
+  flex: 1;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.button-group button[type="submit"] {
+  background: #3a6ea5;
+  color: white;
+}
+
+.button-group button[type="submit"]:hover {
+  background: #2f5b88;
+}
+
+.secondary-button {
+  background: #f0f0f0;
+  color: #333;
+  border: 1px solid #d0d0d0;
+}
+
+.secondary-button:hover {
+  background: #e8e8e8;
 }
 
 .error-message {
