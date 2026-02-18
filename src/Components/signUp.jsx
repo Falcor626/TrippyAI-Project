@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../supabaseClient';
 
-function SignUp({ toggleForm }) {
+function SignUp({ toggleForm, onLogin }) {
     const [email, setEmail] = useState('');
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -56,7 +56,7 @@ function SignUp({ toggleForm }) {
     const closeModal = () => {
         setShowModal(false);
         setError('');
-        // Optionally redirect to login page
+        onLogin();
     };
 
     // Render the sign-up form

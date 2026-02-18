@@ -47,7 +47,7 @@ function Settings({ toggleForm }) {
 
             <div className="button-group">
                 <button type="button" className="secondary-button" onClick={toggleForm}>
-                    Back to Login
+                    Back
                 </button>
             </div>
         </div>

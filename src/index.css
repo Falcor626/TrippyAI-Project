@@ -42,9 +42,6 @@ html[data-theme="dark"] .App {
 }
 
 .settings-btn {
-  position: absolute;
-  top: 20px;
-  right: 20px;
   background: none;
   border: none;
   font-size: 28px;
@@ -55,6 +52,28 @@ html[data-theme="dark"] .App {
 
 .settings-btn:hover {
   transform: scale(1.1);
+}
+
+.profile-btn {
+  background: none;
+  border: none;
+  font-size: 28px;
+  cursor: pointer;
+  transition: transform 0.2s;
+  padding: 8px;
+}
+
+.profile-btn:hover {
+  transform: scale(1.1);
+}
+
+.icon-buttons {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
 }
 
 .App-logo {
@@ -218,19 +237,9 @@ html[data-theme="dark"] .form-container input[type="tel"] {
   border: 1px solid #d0d0d0;
 }
 
-html[data-theme="dark"] .secondary-button {
-  background: #2d2d2d;
-  color: #ffffff;
-  border-color: #404040;
-}
-
 .secondary-button:hover {
   background: #e8e8e8;
   opacity: 0.9;
-}
-
-html[data-theme="dark"] .secondary-button:hover {
-  background: #3a3a3a;
 }
 
 .error-message {

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-function Login({ toggleForm }) {
+function Login({ toggleForm, onLogin }) {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
 
@@ -8,6 +8,10 @@ function Login({ toggleForm }) {
     const handleSubmit = (e) => {
         e.preventDefault();
         console.log('Login:', { username, password });
+        // TODO: Add actual authentication logic here
+        if (username && password) {
+            onLogin();
+        }
     };
 
     // Render the login form
