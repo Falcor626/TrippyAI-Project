@@ -56,15 +56,30 @@ html[data-theme="dark"] .App {
 
 .profile-btn {
   background: none;
-  border: none;
-  font-size: 28px;
+  border: 2px solid #3a6ea5;
   cursor: pointer;
   transition: transform 0.2s;
-  padding: 8px;
+  padding: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-size: 22px;
 }
 
 .profile-btn:hover {
   transform: scale(1.1);
+  border-color: #2f5b88;
+}
+
+.profile-avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
 }
 
 .icon-buttons {

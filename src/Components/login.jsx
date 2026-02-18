@@ -1,16 +1,36 @@
 import { useState } from 'react';
+import { supabase } from '../supabaseClient';
 
 function Login({ toggleForm, onLogin }) {
-    const [username, setUsername] = useState('');
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
 
-    //  Handle form submission
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        console.log('Login:', { username, password });
-        // TODO: Add actual authentication logic here
-        if (username && password) {
-            onLogin();
+        setLoading(true);
+        setError('');
+
+        try {
+            // Sign in with Supabase
+            const { data, error: signInError } = await supabase.auth.signInWithPassword({
+                email: email,
+                password: password
+            });
+
+            if (signInError) throw signInError;
+
+            if (data.user) {
+                onLogin();
+                setEmail('');
+                setPassword('');
+            }
+        } catch (err) {
+            setError(err.message || 'Failed to login');
+            console.error('Login Error:', err);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -18,17 +38,19 @@ function Login({ toggleForm, onLogin }) {
     return (
         <div className="form-container">
             <h2>Login</h2>
+            {error && <div className="error-message">{error}</div>}
             <form onSubmit={handleSubmit}>
                 <div>
-                    <label htmlFor="username">Username:</label>
+                    <label htmlFor="email">Email:</label>
                     <input 
-                        type="text" 
-                        id="username"
-                        name="username"
-                        placeholder="Enter your username"
-                        value={username}
-                        onChange={(e) => setUsername(e.target.value)}
+                        type="email" 
+                        id="email"
+                        name="email"
+                        placeholder="Enter your email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
                         required
+                        disabled={loading}
                     />
                 </div>
                 <div>
@@ -41,11 +63,14 @@ function Login({ toggleForm, onLogin }) {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         required
+                        disabled={loading}
                     />
                 </div>
                 <div className="button-group">
-                    <button type="submit">Submit</button>
-                    <button type="button" className="secondary-button" onClick={toggleForm}>
+                    <button type="submit" disabled={loading}>
+                        {loading ? 'Logging in...' : 'Submit'}
+                    </button>
+                    <button type="button" className="secondary-button" onClick={toggleForm} disabled={loading}>
                         Sign Up
                     </button>
                 </div>
