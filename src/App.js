@@ -5,6 +5,7 @@ import SignUp from './Components/signUp';
 import Settings from './Components/Settings';
 import ProfileSettings from './Components/ProfileSettings';
 import MainMenu from './Components/MainMenu';
+import ResetPassword from './Components/ResetPassword';
 
 function App() {
   const [showLogin, setShowLogin] = useState(true);
@@ -12,12 +13,23 @@ function App() {
   const [showProfile, setShowProfile] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState(null);
+  const [showResetPassword, setShowResetPassword] = useState(false);
 
   // Restore dark mode preference on app load
   useEffect(() => {
     const savedDarkMode = localStorage.getItem('darkMode');
     if (savedDarkMode && JSON.parse(savedDarkMode)) {
       document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  }, []);
+
+  // Check for password reset token in URL
+  useEffect(() => {
+    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    const type = hashParams.get('type');
+    
+    if (type === 'recovery') {
+      setShowResetPassword(true);
     }
   }, []);
 
@@ -76,6 +88,13 @@ function App() {
     setAvatarUrl(null);
   };
 
+  const handleResetComplete = () => {
+    setShowResetPassword(false);
+    setShowLogin(true);
+    // Clear the URL fragment to remove the reset token
+    window.history.replaceState(null, '', window.location.pathname);
+  };
+
   return (
     <div className="App">
       <h1 className="app-title">TrippyAI</h1>
@@ -93,7 +112,9 @@ function App() {
           ⚙️
         </button>
       </div>
-      {showSettings ? (
+      {showResetPassword ? (
+        <ResetPassword onResetComplete={handleResetComplete} />
+      ) : showSettings ? (
         <Settings toggleForm={toggleSettings} />
       ) : showProfile ? (
         <ProfileSettings toggleProfile={toggleProfile} onAvatarUpdate={onAvatarUpdate} />
