@@ -59,6 +59,25 @@ html[data-theme="dark"] .profile-picture-container {
     opacity: 0.5;
 }
 
+.profile-name-info {
+    text-align: center;
+    margin: 0.5rem 0;
+}
+
+.profile-name-info .username {
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--text-color);
+    font-weight: 600;
+}
+
+.profile-name-info .full-name {
+    margin: 0.25rem 0 0 0;
+    font-size: 0.95rem;
+    color: var(--text-color);
+    opacity: 0.8;
+}
+
 .profile-image-buttons {
     display: flex;
     gap: 0.75rem;

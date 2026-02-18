@@ -31,7 +31,9 @@ const COUNTRIES = [
 ];
 
 function ProfileSettings({ toggleProfile, onAvatarUpdate }) {
-    const [gender, setGender] = useState('');
+    const [username, setUsername] = useState('');
+    const [fullName, setFullName] = useState('');
+    const [pronouns, setPronouns] = useState('');
     const [country, setCountry] = useState('');
     const [showDropdown, setShowDropdown] = useState(false);
     const [filteredCountries, setFilteredCountries] = useState([]);
@@ -51,9 +53,15 @@ function ProfileSettings({ toggleProfile, onAvatarUpdate }) {
                     return;
                 }
 
+                // Get user metadata (username, full_name from auth)
+                if (user.user_metadata) {
+                    if (user.user_metadata.username) setUsername(user.user_metadata.username);
+                    if (user.user_metadata.full_name) setFullName(user.user_metadata.full_name);
+                }
+
                 const { data: profile, error: fetchError } = await supabase
                     .from('userProfiles')
-                    .select('gender, country, avatar_url')
+                    .select('pronouns, country, avatar_url')
                     .eq('id', user.id)
                     .single();
 
@@ -63,7 +71,7 @@ function ProfileSettings({ toggleProfile, onAvatarUpdate }) {
                 }
 
                 if (profile) {
-                    if (profile.gender) setGender(profile.gender);
+                    if (profile.pronouns) setPronouns(profile.pronouns);
                     if (profile.country) setCountry(profile.country);
                     if (profile.avatar_url) setPreviewUrl(profile.avatar_url);
                 }
@@ -181,7 +189,7 @@ const handleSave = async () => {
       // do not include updated_at unless that column exists
     };
 
-    if (gender) profileData.gender = gender;
+    if (pronouns) profileData.pronouns = pronouns;
     if (country) profileData.country = country;
     if (imageUrl) profileData.avatar_url = imageUrl; // <- changed to avatar_url
 
@@ -241,6 +249,12 @@ const handleSave = async () => {
                                     <div className="profile-placeholder">📷</div>
                                 )}
                             </div>
+                            
+                            <div className="profile-name-info">
+                                {username && <p className="username"><strong>{username}</strong></p>}
+                                {fullName && <p className="full-name">{fullName}</p>}
+                            </div>
+                            
                             <input
                                 type="file"
                                 id="profileImage"
@@ -270,14 +284,14 @@ const handleSave = async () => {
                         </div>
 
                         <div className="profile-item">
-                            <label htmlFor="gender">Gender:</label>
+                            <label htmlFor="pronouns">Pronouns:</label>
                             <input
                                 type="text"
-                                id="gender"
-                                name="gender"
-                                placeholder="Enter your gender"
-                                value={gender}
-                                onChange={(e) => setGender(e.target.value)}
+                                id="pronouns"
+                                name="pronouns"
+                                placeholder="e.g., he/him, she/her, they/them"
+                                value={pronouns}
+                                onChange={(e) => setPronouns(e.target.value)}
                                 disabled={uploading}
                             />
                         </div>
