@@ -381,3 +381,13 @@ html:not([data-theme="dark"]) .q-back-btn:hover {
 .q-submit-btn:active {
     transform: translateY(0);
 }
+
+.q-error-banner {
+  margin: 0 2rem 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  background: rgba(255, 99, 71, 0.12);
+  border: 1px solid rgba(255, 99, 71, 0.4);
+  color: #ffd7d1;
+  font-size: 0.95rem;
+}
