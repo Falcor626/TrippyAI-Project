@@ -37,10 +37,11 @@ function mapTripRow(row) {
   };
 }
 
-function ViewPlans({ onSelectPlan, onBackToMenu, onNewTrip }) {
+function ViewPlans({ onSelectPlan, onBackToMenu, onNewTrip, onEditPlan }) {
   const [plans, setPlans] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [deletingPlanId, setDeletingPlanId] = useState(null);
 
   useEffect(() => {
     const loadTrips = async () => {
@@ -61,6 +62,7 @@ function ViewPlans({ onSelectPlan, onBackToMenu, onNewTrip }) {
           .from('trip_requests')
           .select('id, destination, departure_city, start_date, end_date, budget_range, interests, status, updated_at, created_at')
           .eq('user_id', user.id)
+          .neq('status', 'deleted')
           .order('updated_at', { ascending: false });
 
         if (tripsError) {
@@ -78,6 +80,66 @@ function ViewPlans({ onSelectPlan, onBackToMenu, onNewTrip }) {
 
     loadTrips();
   }, []);
+
+  const handleDeletePlan = async (plan) => {
+    const confirmed = window.confirm(`Delete the ${plan.destination} itinerary? This cannot be undone.`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingPlanId(plan.id);
+    setError('');
+
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        throw new Error('Please log in again before deleting this trip.');
+      }
+
+      const { data: deletedRows, error: deleteError } = await supabase
+        .from('trip_requests')
+        .delete()
+        .eq('id', plan.id)
+        .eq('user_id', user.id)
+        .select('id');
+
+      if (deleteError) {
+        throw deleteError;
+      }
+
+      if (!deletedRows || deletedRows.length === 0) {
+        const { data: archivedRows, error: archiveError } = await supabase
+          .from('trip_requests')
+          .update({
+            status: 'deleted',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', plan.id)
+          .eq('user_id', user.id)
+          .select('id');
+
+        if (archiveError) {
+          throw archiveError;
+        }
+
+        if (!archivedRows || archivedRows.length === 0) {
+          throw new Error('Supabase did not delete this trip. Check the delete/update Row Level Security policy for trip_requests.');
+        }
+      }
+
+      setPlans((currentPlans) => currentPlans.filter((savedPlan) => savedPlan.id !== plan.id));
+    } catch (deleteError) {
+      console.error('Error deleting saved trip:', deleteError);
+      setError(deleteError.message || 'Unable to delete this saved trip right now.');
+    } finally {
+      setDeletingPlanId(null);
+    }
+  };
 
   return (
     <div className="view-plans-page">
@@ -156,6 +218,27 @@ function ViewPlans({ onSelectPlan, onBackToMenu, onNewTrip }) {
                     }}
                   >
                     Open Itinerary →
+                  </button>
+                  <button
+                    className="plan-edit-btn"
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEditPlan(plan);
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    className="plan-delete-btn"
+                    type="button"
+                    disabled={deletingPlanId === plan.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeletePlan(plan);
+                    }}
+                  >
+                    {deletingPlanId === plan.id ? 'Deleting...' : 'Delete'}
                   </button>
                 </div>
               </article>

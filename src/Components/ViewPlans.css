@@ -102,26 +102,54 @@
 }
 
 .plan-card-footer {
-  display: flex;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: 1fr 0.55fr 0.65fr;
+  gap: 10px;
   padding-top: 8px;
 }
 
-.plan-select-btn {
+.plan-select-btn,
+.plan-edit-btn,
+.plan-delete-btn {
   width: 100%;
   padding: 0.85rem 1rem;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
-  background: linear-gradient(135deg, rgba(240, 184, 108, 0.2), rgba(108, 160, 255, 0.1));
   color: #ffd79c;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
-.plan-select-btn:hover {
+.plan-select-btn {
+  background: linear-gradient(135deg, rgba(240, 184, 108, 0.2), rgba(108, 160, 255, 0.1));
+}
+
+.plan-edit-btn {
+  background: rgba(255, 255, 255, 0.06);
+  color: #f7f4ee;
+}
+
+.plan-delete-btn {
+  background: rgba(220, 72, 72, 0.16);
+  color: #ffb8b8;
+  border-color: rgba(220, 72, 72, 0.35);
+}
+
+.plan-select-btn:hover,
+.plan-edit-btn:hover {
   background: linear-gradient(135deg, rgba(240, 184, 108, 0.3), rgba(108, 160, 255, 0.15));
   border-color: rgba(240, 184, 108, 0.5);
+}
+
+.plan-delete-btn:not(:disabled):hover {
+  background: rgba(220, 72, 72, 0.24);
+  border-color: rgba(220, 72, 72, 0.55);
+}
+
+.plan-delete-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 @media (max-width: 980px) {
@@ -154,5 +182,9 @@
 
   .plan-card {
     padding: 20px;
+  }
+
+  .plan-card-footer {
+    grid-template-columns: 1fr;
   }
 }

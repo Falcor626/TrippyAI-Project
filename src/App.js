@@ -258,7 +258,12 @@ function App() {
     try {
       const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
 
-      const selectPromise = supabase.from('trip_requests').select('id').eq('user_id', userId).limit(1);
+      const selectPromise = supabase
+        .from('trip_requests')
+        .select('id')
+        .eq('user_id', userId)
+        .neq('status', 'deleted')
+        .limit(1);
 
       const result = await Promise.race([selectPromise, timeoutPromise]);
       const { data, error } = result;
@@ -607,19 +612,14 @@ function App() {
         ) : activeTrip ? (
           <TravelItinerary
             tripData={activeTrip}
-            onBackToPlans={() => {
-              setActiveTrip(null);
-              setShowSavedTrips(true);
-            }}
-            onEditPlan={() => handleStartPlan(activeTrip)}
             onLogout={handleLogout}
-            onRegeneratePlan={handleRegenerateTrip}
           />
         ) : showSavedTrips ? (
           <ViewPlans
             onBackToMenu={() => setShowSavedTrips(false)}
             onNewTrip={() => handleStartPlan()}
             onSelectPlan={handleSelectTrip}
+            onEditPlan={handleStartPlan}
           />
         ) : (
           <MainMenu onLogout={handleLogout} onStartPlan={() => handleStartPlan()} onViewPlans={handleViewPlans} />

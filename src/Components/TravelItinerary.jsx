@@ -1,5 +1,7 @@
+import { useEffect, useMemo, useState } from 'react';
 import './TravelItinerary.css';
 import TripMap from './TripMap';
+import { getFlightOptions } from '../services/travelApi';
 
 const INTEREST_LABELS = {
   adventure: 'Adventure',
@@ -87,6 +89,16 @@ const getTripLength = (startDate, endDate) => {
   return Math.max(3, diff + 1);
 };
 
+const formatMoney = (value) => {
+  if (value == null || Number.isNaN(Number(value))) return 'N/A';
+
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(Number(value));
+};
+
 const buildItinerary = (trip) => {
   const destination = trip.destination || 'your destination';
   const interests = trip.interests?.length
@@ -127,7 +139,7 @@ const buildItinerary = (trip) => {
   });
 };
 
-function TravelItinerary({ tripData, onEditPlan, onLogout, onBackToPlans, onRegeneratePlan }) {
+function TravelItinerary({ tripData, onLogout }) {
   const trip = tripData || {};
   const destination = trip.destination || 'Lisbon, Portugal';
   const departureCity = trip.departureCity || 'New York, NY';
@@ -136,6 +148,85 @@ function TravelItinerary({ tripData, onEditPlan, onLogout, onBackToPlans, onRege
   const interests = trip.interests?.length
     ? trip.interests.map((id) => INTEREST_LABELS[id] || id)
     : ['Culture', 'Food & Drink', 'Nature'];
+
+  const [flightState, setFlightState] = useState({
+    loading: false,
+    error: '',
+    flights: [],
+    priceInsights: null,
+    resolvedDeparture: null,
+    resolvedArrival: null,
+  });
+
+  const flightSearchReady = useMemo(
+    () => Boolean(trip.departureCity && trip.destination && trip.startDate),
+    [trip.departureCity, trip.destination, trip.startDate]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!flightSearchReady) {
+      setFlightState({
+        loading: false,
+        error: '',
+        flights: [],
+        priceInsights: null,
+        resolvedDeparture: null,
+        resolvedArrival: null,
+      });
+      return undefined;
+    }
+
+    const loadFlights = async () => {
+      setFlightState({
+        loading: true,
+        error: '',
+        flights: [],
+        priceInsights: null,
+        resolvedDeparture: null,
+        resolvedArrival: null,
+      });
+
+      try {
+        const result = await getFlightOptions({
+          departureCity: trip.departureCity,
+          destination: trip.destination,
+          startDate: trip.startDate,
+          endDate: trip.endDate,
+          travelerCount: trip.travelerCount,
+        });
+
+        if (cancelled) return;
+
+        setFlightState({
+          loading: false,
+          error: result.flights.length ? '' : 'No flights were returned for this route and date.',
+          flights: result.flights.slice(0, 3),
+          priceInsights: result.priceInsights || null,
+          resolvedDeparture: result.resolvedDeparture || null,
+          resolvedArrival: result.resolvedArrival || null,
+        });
+      } catch (error) {
+        if (cancelled) return;
+
+        setFlightState({
+          loading: false,
+          error: error.message || 'Unable to load live flights right now.',
+          flights: [],
+          priceInsights: null,
+          resolvedDeparture: null,
+          resolvedArrival: null,
+        });
+      }
+    };
+
+    loadFlights();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [flightSearchReady, trip.departureCity, trip.destination, trip.startDate, trip.endDate, trip.travelerCount]);
 
   return (
     <main className="itinerary-page">
@@ -150,15 +241,6 @@ function TravelItinerary({ tripData, onEditPlan, onLogout, onBackToPlans, onRege
           </div>
 
           <div className="topbar-actions">
-            <button className="ghost-button" type="button" onClick={onBackToPlans}>
-              Saved Trips
-            </button>
-            <button className="ghost-button" type="button" onClick={onEditPlan}>
-              Edit plan
-            </button>
-            <button className="ghost-button" type="button" onClick={onRegeneratePlan}>
-              Regenerate
-            </button>
             <button className="ghost-button ghost-button-secondary" type="button" onClick={onLogout}>
               Logout
             </button>
@@ -222,6 +304,109 @@ function TravelItinerary({ tripData, onEditPlan, onLogout, onBackToPlans, onRege
                   </article>
                 ))}
               </div>
+            </div>
+
+            <div className="panel section-panel flight-panel">
+              <div className="section-heading">
+                <div>
+                  <p className="section-label">Flights</p>
+                  <h3>Live flight snapshot</h3>
+                </div>
+                <span className="section-badge">SerpApi</span>
+              </div>
+
+              {!flightSearchReady && (
+                <p className="flight-helper-copy">
+                  Add a departure field, destination field, and start date to load live flight options.
+                </p>
+              )}
+
+              {flightState.loading && <p className="flight-helper-copy">Loading live flights...</p>}
+
+              {!flightState.loading && flightState.error && (
+                <p className="flight-helper-copy flight-helper-copy-error">{flightState.error}</p>
+              )}
+
+              {!flightState.loading && !flightState.error && (flightState.resolvedDeparture || flightState.resolvedArrival) && (
+                <div className="flight-resolution-row">
+                  {flightState.resolvedDeparture && (
+                    <div className="metric-card flight-metric-card">
+                      <span className="metric-label">Departure match</span>
+                      <strong>{flightState.resolvedDeparture.matchedName}</strong>
+                      <p>Using {flightState.resolvedDeparture.selectedAirport?.id || 'best nearby airport'} for flight search.</p>
+                    </div>
+                  )}
+                  {flightState.resolvedArrival && (
+                    <div className="metric-card flight-metric-card">
+                      <span className="metric-label">Arrival match</span>
+                      <strong>{flightState.resolvedArrival.matchedName}</strong>
+                      <p>Using {flightState.resolvedArrival.selectedAirport?.id || 'best nearby airport'} for flight search.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!flightState.loading && !flightState.error && Boolean(flightState.priceInsights) && (
+                <div className="flight-insights-row">
+                  {flightState.priceInsights?.lowest_price != null && (
+                    <div className="metric-card flight-metric-card">
+                      <span className="metric-label">Lowest fare</span>
+                      <strong>{formatMoney(flightState.priceInsights.lowest_price)}</strong>
+                    </div>
+                  )}
+                  {flightState.priceInsights?.price_level && (
+                    <div className="metric-card flight-metric-card">
+                      <span className="metric-label">Price level</span>
+                      <strong>{flightState.priceInsights.price_level}</strong>
+                    </div>
+                  )}
+                  {flightState.priceInsights?.typical_price_range?.length === 2 && (
+                    <div className="metric-card flight-metric-card">
+                      <span className="metric-label">Typical range</span>
+                      <strong>{formatMoney(flightState.priceInsights.typical_price_range[0])} - {formatMoney(flightState.priceInsights.typical_price_range[1])}</strong>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!flightState.loading && !flightState.error && flightState.flights.length > 0 && (
+                <div className="flight-cards">
+                  {flightState.flights.map((flight, index) => (
+                    <article className="flight-card" key={`${flight.airline}-${flight.departureTime}-${index}`}>
+                      <div className="flight-card-top">
+                        <div>
+                          <p className="section-label">Option {index + 1}</p>
+                          <h4>{flight.airline}</h4>
+                        </div>
+                        <strong className="flight-price">{formatMoney(flight.priceRaw ?? flight.price)}</strong>
+                      </div>
+
+                      <div className="flight-route-grid">
+                        <div>
+                          <span className="flight-route-label">Depart</span>
+                          <p>{flight.departureAirport || 'TBD'}<br />{flight.departureTime || 'Time unavailable'}</p>
+                        </div>
+                        <div>
+                          <span className="flight-route-label">Arrive</span>
+                          <p>{flight.arrivalAirport || 'TBD'}<br />{flight.arrivalTime || 'Time unavailable'}</p>
+                        </div>
+                        <div>
+                          <span className="flight-route-label">Duration</span>
+                          <p>{flight.totalDuration ? `${flight.totalDuration} min` : 'Unavailable'}</p>
+                        </div>
+                        <div>
+                          <span className="flight-route-label">Stops</span>
+                          <p>{flight.stops}</p>
+                        </div>
+                      </div>
+
+                      {flight.layovers?.length > 0 && (
+                        <p className="flight-layovers">Layovers: {flight.layovers.join(', ')}</p>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="split-grid">

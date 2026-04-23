@@ -347,3 +347,78 @@
     gap: 8px;
   }
 }
+.flight-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.flight-helper-copy {
+  margin: 0;
+}
+
+.flight-helper-copy-error {
+  color: #ffb4b4;
+}
+
+.flight-insights-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.flight-metric-card {
+  padding: 16px;
+}
+
+.flight-cards {
+  display: grid;
+  gap: 14px;
+}
+
+.flight-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.flight-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.flight-card-top h4 {
+  margin: 0;
+}
+
+.flight-price {
+  font-size: 1.25rem;
+}
+
+.flight-route-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.flight-route-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #f0b86c;
+}
+
+.flight-route-grid p,
+.flight-layovers {
+  margin: 0;
+}
+
+.flight-layovers {
+  margin-top: 12px;
+  color: rgba(247, 244, 238, 0.78);
+}

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import './Questionnaire.css';
-import { getWeatherPreview, validateLocation } from '../services/travelApi';
+import { validateLocation } from '../services/travelApi';
 
 const INTERESTS = [
   { id: 'adventure', label: '🧗 Adventure', desc: 'Hiking, climbing, extreme sports' },
@@ -63,39 +63,6 @@ function LocationSuggestions({ suggestions, fieldKey, visible, onPickSuggestion 
   );
 }
 
-function formatPreviewDate(dateStr) {
-  return new Date(`${dateStr}T00:00:00`).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-  });
-}
-
-function weatherLabelFromCode(code) {
-  const labels = {
-    0: 'Clear',
-    1: 'Mainly clear',
-    2: 'Partly cloudy',
-    3: 'Cloudy',
-    45: 'Fog',
-    48: 'Fog',
-    51: 'Light drizzle',
-    53: 'Drizzle',
-    55: 'Heavy drizzle',
-    61: 'Light rain',
-    63: 'Rain',
-    65: 'Heavy rain',
-    71: 'Light snow',
-    73: 'Snow',
-    75: 'Heavy snow',
-    80: 'Rain showers',
-    81: 'Rain showers',
-    82: 'Heavy showers',
-    95: 'Thunderstorm',
-  };
-
-  return labels[code] || 'Variable';
-}
-
 function LocationStatus({ state, fieldKey, onPickSuggestion }) {
   if (!state.message && state.status !== 'validating') {
     return null;
@@ -139,11 +106,6 @@ function Questionnaire({
     destination: emptyLocationState,
     departureCity: emptyLocationState,
   });
-  const [tripPreview, setTripPreview] = useState({
-    loading: false,
-    error: '',
-    weather: [],
-  });
   const [focusedField, setFocusedField] = useState('');
 
   useEffect(() => {
@@ -155,17 +117,6 @@ function Questionnaire({
       departureCity: emptyLocationState,
     });
   }, [initialValues]);
-
-  const tripPreviewReady = useMemo(
-    () =>
-      Boolean(
-        locationStates.destination.place &&
-          form.startDate &&
-          form.endDate &&
-          locationStates.destination.status === 'valid'
-      ),
-    [locationStates.destination.place, locationStates.destination.status, form.startDate, form.endDate]
-  );
 
   const updateField = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -268,59 +219,6 @@ function Questionnaire({
 
     return () => window.clearTimeout(timeoutId);
   }, [form.departureCity]);
-
-  useEffect(() => {
-    let isCancelled = false;
-
-    const loadTripPreview = async () => {
-      if (!tripPreviewReady) {
-        setTripPreview({
-          loading: false,
-          error: '',
-          weather: [],
-        });
-        return;
-      }
-
-      setTripPreview((prev) => ({
-        ...prev,
-        loading: true,
-        error: '',
-      }));
-
-      try {
-        const place = locationStates.destination.place;
-        const weather = await getWeatherPreview({
-          lat: place.lat,
-          lon: place.lon,
-          startDate: form.startDate,
-          endDate: form.endDate,
-        });
-
-        if (!isCancelled) {
-          setTripPreview({
-            loading: false,
-            error: '',
-            weather: weather || [],
-          });
-        }
-      } catch (error) {
-        if (!isCancelled) {
-          setTripPreview({
-            loading: false,
-            error: 'Preview data could not be loaded right now, but you can still save the trip.',
-            weather: [],
-          });
-        }
-      }
-    };
-
-    loadTripPreview();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [tripPreviewReady, locationStates.destination.place, form.startDate, form.endDate]);
 
   const pickSuggestion = (field, suggestion) => {
     setForm((prev) => ({
@@ -598,40 +496,6 @@ function Questionnaire({
             </div>
             {errors.interests && <span className="q-error">{errors.interests}</span>}
           </div>
-
-          {(tripPreview.loading || tripPreview.error || tripPreview.weather.length > 0) && (
-            <div className="q-preview-card">
-              <div className="q-preview-header">
-                <div>
-                  <h3 className="q-preview-title">Live trip preview</h3>
-                  <p className="q-preview-subtitle">
-                    Preview pulled from free APIs while the questionnaire is being filled out.
-                  </p>
-                </div>
-                {tripPreview.loading && <span className="q-preview-pill">Loading…</span>}
-              </div>
-
-              {tripPreview.error && <div className="q-preview-error">{tripPreview.error}</div>}
-
-              {tripPreview.weather.length > 0 && (
-                <div className="q-preview-section">
-                  <h4 className="q-preview-section-title">Weather outlook</h4>
-                  <div className="q-weather-grid">
-                    {tripPreview.weather.slice(0, 5).map((day) => (
-                      <div key={day.date} className="q-weather-card">
-                        <span className="q-weather-date">{formatPreviewDate(day.date)}</span>
-                        <span className="q-weather-label">{weatherLabelFromCode(day.weatherCode)}</span>
-                        <span className="q-weather-temp">
-                          {Math.round(day.tempMax)}°F / {Math.round(day.tempMin)}°F
-                        </span>
-                        <span className="q-weather-rain">Rain chance: {day.precipitationProbability ?? 0}%</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
         <div className="q-footer">
