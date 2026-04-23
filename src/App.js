@@ -7,6 +7,8 @@ import ProfileSettings from './Components/ProfileSettings';
 import MainMenu from './Components/MainMenu';
 import ResetPassword from './Components/ResetPassword';
 import Questionnaire from './Components/Questionnaire';
+import ViewPlans from './Components/ViewPlans';
+import TravelItinerary from './Components/TravelItinerary';
 
 const emptyQuestionnaire = {
   destination: '',
@@ -17,6 +19,21 @@ const emptyQuestionnaire = {
   interests: [],
 };
 
+function mapTripRowToForm(row) {
+  return {
+    id: row.id,
+    destination: row.destination || '',
+    departureCity: row.departure_city || '',
+    startDate: row.start_date || '',
+    endDate: row.end_date || '',
+    budget: row.budget_range || '',
+    interests: row.interests || [],
+    status: row.status || 'pending',
+    updatedAt: row.updated_at || null,
+    createdAt: row.created_at || null,
+  };
+}
+
 function App() {
   const [showLogin, setShowLogin] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
@@ -26,10 +43,13 @@ function App() {
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [showQuestionnaire, setShowQuestionnaire] = useState(false);
+  const [showSavedTrips, setShowSavedTrips] = useState(false);
   const [questionnaireMode, setQuestionnaireMode] = useState('trip');
   const [questionnaireDefaults, setQuestionnaireDefaults] = useState(emptyQuestionnaire);
   const [questionnaireError, setQuestionnaireError] = useState('');
   const [isSubmittingQuestionnaire, setIsSubmittingQuestionnaire] = useState(false);
+  const [activeTrip, setActiveTrip] = useState(null);
+  const [editingTripId, setEditingTripId] = useState(null);
 
   useEffect(() => {
     const savedDarkMode = localStorage.getItem('darkMode');
@@ -48,21 +68,19 @@ function App() {
   }, []);
 
   useEffect(() => {
-    // Don't try to getSession() - it's slow. Just rely on onAuthStateChange
-    // which will fire immediately with the current session state.
     let mounted = true;
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (!mounted) return;
-      
+
       if (session?.user) {
         await initializeUserState(session.user);
       } else {
         resetToLoggedOutState();
       }
-      
+
       setIsInitializing(false);
     });
 
@@ -70,6 +88,7 @@ function App() {
       mounted = false;
       subscription.unsubscribe();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const toggleForm = () => {
@@ -90,10 +109,13 @@ function App() {
     setShowSettings(false);
     setShowProfile(false);
     setShowQuestionnaire(false);
+    setShowSavedTrips(false);
     setQuestionnaireMode('trip');
     setQuestionnaireDefaults(emptyQuestionnaire);
     setQuestionnaireError('');
     setAvatarUrl(null);
+    setActiveTrip(null);
+    setEditingTripId(null);
   };
 
   const ensureUserProfileRow = async (user) => {
@@ -104,14 +126,10 @@ function App() {
     };
 
     try {
-      const upsertPromise = supabase
-        .from('userProfiles')
-        .upsert(profileSeed, { onConflict: 'id' });
-      
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('timeout')), 10000)
-      );
-      
+      const upsertPromise = supabase.from('userProfiles').upsert(profileSeed, { onConflict: 'id' });
+
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000));
+
       await Promise.race([upsertPromise, timeoutPromise]);
     } catch (error) {
       console.error('[ensureUserProfileRow] Error:', error.message);
@@ -120,16 +138,10 @@ function App() {
 
   const loadUserProfile = async (userId) => {
     try {
-      const selectPromise = supabase
-        .from('userProfiles')
-        .select('avatar_url')
-        .eq('id', userId)
-        .maybeSingle();
-      
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('timeout')), 10000)
-      );
-      
+      const selectPromise = supabase.from('userProfiles').select('avatar_url').eq('id', userId).maybeSingle();
+
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000));
+
       const result = await Promise.race([selectPromise, timeoutPromise]);
       const { data: profile, error } = result;
 
@@ -151,11 +163,9 @@ function App() {
         .select('preferred_departure_city, preferred_budget, preferred_interests')
         .eq('user_id', userId)
         .maybeSingle();
-      
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('timeout')), 10000)
-      );
-      
+
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000));
+
       const result = await Promise.race([selectPromise, timeoutPromise]);
       const { data: preferences, error } = result;
 
@@ -195,12 +205,16 @@ function App() {
 
     const { defaults, hasPreferences } = await getQuestionnaireDefaults(user.id);
     setQuestionnaireDefaults(defaults);
+    setActiveTrip(null);
+    setEditingTripId(null);
 
     if (!hasPreferences) {
       setQuestionnaireMode('onboarding');
       setShowQuestionnaire(true);
+      setShowSavedTrips(false);
     } else {
       setShowQuestionnaire(false);
+      setShowSavedTrips(false);
       setQuestionnaireMode('trip');
     }
   };
@@ -230,7 +244,14 @@ function App() {
     window.history.replaceState(null, '', window.location.pathname);
   };
 
-  const handleStartPlan = async () => {
+  const handleViewPlans = () => {
+    setActiveTrip(null);
+    setEditingTripId(null);
+    setShowSavedTrips(true);
+    setShowQuestionnaire(false);
+  };
+
+  const handleStartPlan = async (tripToEdit = null) => {
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -241,10 +262,26 @@ function App() {
       return;
     }
 
-    const { defaults } = await getQuestionnaireDefaults(user.id);
-    setQuestionnaireDefaults(defaults);
+    if (tripToEdit) {
+      setEditingTripId(tripToEdit.id || null);
+      setQuestionnaireDefaults({
+        destination: tripToEdit.destination || '',
+        departureCity: tripToEdit.departureCity || '',
+        startDate: tripToEdit.startDate || '',
+        endDate: tripToEdit.endDate || '',
+        budget: tripToEdit.budget || '',
+        interests: tripToEdit.interests || [],
+      });
+    } else {
+      const { defaults } = await getQuestionnaireDefaults(user.id);
+      setQuestionnaireDefaults(defaults);
+      setEditingTripId(null);
+    }
+
     setQuestionnaireMode('trip');
     setQuestionnaireError('');
+    setShowSavedTrips(false);
+    setActiveTrip(null);
     setShowQuestionnaire(true);
   };
 
@@ -264,37 +301,68 @@ function App() {
 
       const now = new Date().toISOString();
 
-      const { error: preferencesError } = await supabase
-        .from('traveler_preferences')
-        .upsert(
-          {
-            user_id: user.id,
-            preferred_departure_city: formData.departureCity,
-            preferred_budget: formData.budget,
-            preferred_interests: formData.interests,
-            updated_at: now,
-          },
-          { onConflict: 'user_id' }
-        );
+      const { error: preferencesError } = await supabase.from('traveler_preferences').upsert(
+        {
+          user_id: user.id,
+          preferred_departure_city: formData.departureCity,
+          preferred_budget: formData.budget,
+          preferred_interests: formData.interests,
+          updated_at: now,
+        },
+        { onConflict: 'user_id' }
+      );
 
       if (preferencesError) {
         throw preferencesError;
       }
 
-      const { error: tripRequestError } = await supabase.from('trip_requests').insert({
-        user_id: user.id,
-        destination: formData.destination,
-        departure_city: formData.departureCity,
-        start_date: formData.startDate,
-        end_date: formData.endDate,
-        budget_range: formData.budget,
-        interests: formData.interests,
-        status: 'pending',
-        updated_at: now,
-      });
+      let savedTripRow;
 
-      if (tripRequestError) {
-        throw tripRequestError;
+      if (editingTripId) {
+        const { data, error: tripRequestError } = await supabase
+          .from('trip_requests')
+          .update({
+            destination: formData.destination,
+            departure_city: formData.departureCity,
+            start_date: formData.startDate,
+            end_date: formData.endDate,
+            budget_range: formData.budget,
+            interests: formData.interests,
+            status: 'generated',
+            updated_at: now,
+          })
+          .eq('id', editingTripId)
+          .eq('user_id', user.id)
+          .select()
+          .single();
+
+        if (tripRequestError) {
+          throw tripRequestError;
+        }
+
+        savedTripRow = data;
+      } else {
+        const { data, error: tripRequestError } = await supabase
+          .from('trip_requests')
+          .insert({
+            user_id: user.id,
+            destination: formData.destination,
+            departure_city: formData.departureCity,
+            start_date: formData.startDate,
+            end_date: formData.endDate,
+            budget_range: formData.budget,
+            interests: formData.interests,
+            status: 'generated',
+            updated_at: now,
+          })
+          .select()
+          .single();
+
+        if (tripRequestError) {
+          throw tripRequestError;
+        }
+
+        savedTripRow = data;
       }
 
       setQuestionnaireDefaults({
@@ -305,12 +373,49 @@ function App() {
       });
       setQuestionnaireMode('trip');
       setShowQuestionnaire(false);
+      setShowSavedTrips(false);
+      setEditingTripId(null);
+      setActiveTrip(mapTripRowToForm(savedTripRow));
     } catch (error) {
       console.error('Questionnaire submit error:', error);
       setQuestionnaireError(error.message || 'Failed to save your questionnaire.');
       throw error;
     } finally {
       setIsSubmittingQuestionnaire(false);
+    }
+  };
+
+  const handleSelectTrip = (trip) => {
+    setActiveTrip(trip);
+    setShowSavedTrips(false);
+    setShowQuestionnaire(false);
+  };
+
+  const handleRegenerateTrip = async () => {
+    if (!activeTrip?.id) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+
+    try {
+      const { error } = await supabase
+        .from('trip_requests')
+        .update({ status: 'regenerated', updated_at: now })
+        .eq('id', activeTrip.id);
+
+      if (error) {
+        throw error;
+      }
+
+      setActiveTrip((prev) => ({
+        ...prev,
+        status: 'regenerated',
+        updatedAt: now,
+      }));
+    } catch (error) {
+      console.error('Regenerate trip error:', error);
+      alert(error.message || 'Unable to regenerate this itinerary right now.');
     }
   };
 
@@ -349,11 +454,29 @@ function App() {
               setQuestionnaireError('');
               setShowQuestionnaire(false);
               setQuestionnaireMode('trip');
+              setEditingTripId(null);
             }}
             onSubmit={handleQuestionnaireSubmit}
           />
+        ) : activeTrip ? (
+          <TravelItinerary
+            tripData={activeTrip}
+            onBackToPlans={() => {
+              setActiveTrip(null);
+              setShowSavedTrips(true);
+            }}
+            onEditPlan={() => handleStartPlan(activeTrip)}
+            onLogout={handleLogout}
+            onRegeneratePlan={handleRegenerateTrip}
+          />
+        ) : showSavedTrips ? (
+          <ViewPlans
+            onBackToMenu={() => setShowSavedTrips(false)}
+            onNewTrip={() => handleStartPlan()}
+            onSelectPlan={handleSelectTrip}
+          />
         ) : (
-          <MainMenu onLogout={handleLogout} onStartPlan={handleStartPlan} />
+          <MainMenu onLogout={handleLogout} onStartPlan={() => handleStartPlan()} onViewPlans={handleViewPlans} />
         )
       ) : showLogin ? (
         <Login toggleForm={toggleForm} onLogin={handleLogin} />

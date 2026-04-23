@@ -19,7 +19,7 @@ function SignUp({ toggleForm, onLogin }) {
         
         try {
             // Sign up the user with Supabase Auth
-            const { data, error: signUpError } = await supabase.auth.signUp({
+            const { error: signUpError } = await supabase.auth.signUp({
                 email: email,
                 password: password,
                 options: {

@@ -22,9 +22,39 @@ const BUDGET_LABELS = {
 const DEFAULT_PACKING = ['Passport', 'Comfortable walking shoes', 'Portable charger', 'Transit card', 'Light layer'];
 
 const DEFAULT_TIPS = [
-  'Book museum entries for the first afternoon so the first morning stays flexible.',
-  'Keep one open block each day for a cafe, viewpoint, or local market you discover on the ground.',
-  'Carry a small day bag with water, charger, and cash for transit or street food stops.',
+  'Book one headline activity early so the rest of the day stays flexible.',
+  'Leave one open block each day for a cafe, viewpoint, or spontaneous stop.',
+  'Keep transit, weather, and meal timing light on arrival day so the pace stays realistic.',
+];
+
+const TIMELINE_TEMPLATES = [
+  {
+    time: '08:30',
+    title: 'Easy arrival block',
+    detail: 'Check in, reset, and take a short orientation walk near your stay before doing anything ambitious.',
+  },
+  {
+    time: '11:30',
+    title: 'Signature activity',
+    detail: 'Place the most important attraction here so the day has a clear anchor and fewer timing surprises.',
+  },
+  {
+    time: '15:30',
+    title: 'Recharge and explore',
+    detail: 'Slow the pace with a meal, coffee stop, market visit, or scenic walk before the evening picks up.',
+  },
+  {
+    time: '19:00',
+    title: 'Evening highlight',
+    detail: 'Use the night for dinner, sunset views, or a local performance depending on the trip mood.',
+  },
+];
+
+const REGENERATED_VARIANTS = [
+  'Move the biggest attraction earlier to reduce stress later in the day.',
+  'Swap one dense sightseeing block for a slower neighborhood experience.',
+  'Keep the afternoon lighter so the evening can carry the energy of the day.',
+  'Use one reservation-heavy block and one open-ended block for better flexibility.',
 ];
 
 const formatDate = (value) => {
@@ -34,6 +64,17 @@ const formatDate = (value) => {
     month: 'short',
     day: 'numeric',
   }).format(new Date(`${value}T12:00:00`));
+};
+
+const formatDateTime = (value) => {
+  if (!value) return 'Not saved yet';
+
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(value));
 };
 
 const getTripLength = (startDate, endDate) => {
@@ -54,33 +95,39 @@ const buildItinerary = (trip) => {
 
   const primary = interests[0];
   const secondary = interests[1] || interests[0];
-  const third = interests[2] || 'Scenic walks';
+  const tertiary = interests[2] || 'Scenic walks';
+  const variantIndex = trip.updatedAt ? new Date(trip.updatedAt).getSeconds() % REGENERATED_VARIANTS.length : 0;
 
-  return [
-    {
-      time: '08:30',
-      title: 'Arrive and reset',
-      detail: `Check in, unpack, and settle into a neighborhood stroll around ${destination}.`,
-    },
-    {
-      time: '12:00',
-      title: `${primary} anchor`,
-      detail: `Book one headline ${primary.toLowerCase()} experience early so the trip has a clear signature moment.`,
-    },
-    {
-      time: '15:30',
-      title: `${secondary} stop`,
-      detail: `Pair a relaxed lunch with a ${secondary.toLowerCase()} stop that keeps the pace balanced.`,
-    },
-    {
-      time: '19:00',
-      title: `${third} evening`,
-      detail: 'Reserve sunset time for a viewpoint, waterfront walk, or live local performance.',
-    },
-  ];
+  return TIMELINE_TEMPLATES.map((item, index) => {
+    if (index === 1) {
+      return {
+        ...item,
+        title: `${primary} anchor`,
+        detail: `Center this block around one strong ${primary.toLowerCase()} experience in ${destination} so the itinerary has a memorable core.`,
+      };
+    }
+
+    if (index === 2) {
+      return {
+        ...item,
+        title: `${secondary} reset`,
+        detail: `Follow the main activity with a lighter ${secondary.toLowerCase()} stop that keeps the trip feeling enjoyable instead of rushed.`,
+      };
+    }
+
+    if (index === 3) {
+      return {
+        ...item,
+        title: `${tertiary} evening`,
+        detail: REGENERATED_VARIANTS[variantIndex],
+      };
+    }
+
+    return item;
+  });
 };
 
-function TravelItinerary({ tripData, onEditPlan, onLogout, onBackToMenu }) {
+function TravelItinerary({ tripData, onEditPlan, onLogout, onBackToPlans, onRegeneratePlan }) {
   const trip = tripData || {};
   const destination = trip.destination || 'Lisbon, Portugal';
   const departureCity = trip.departureCity || 'New York, NY';
@@ -98,16 +145,19 @@ function TravelItinerary({ tripData, onEditPlan, onLogout, onBackToMenu }) {
             <p className="eyebrow">Travel itinerary</p>
             <h1>{destination}</h1>
             <p className="itinerary-subtitle">
-              A polished trip board for {departureCity} with {tripLength} days of focused, flexible planning.
+              A structured trip board for {departureCity} with {tripLength} days of focused, flexible planning.
             </p>
           </div>
 
           <div className="topbar-actions">
-            <button className="ghost-button" type="button" onClick={onBackToMenu}>
-              Menu
+            <button className="ghost-button" type="button" onClick={onBackToPlans}>
+              Saved Trips
             </button>
             <button className="ghost-button" type="button" onClick={onEditPlan}>
               Edit plan
+            </button>
+            <button className="ghost-button" type="button" onClick={onRegeneratePlan}>
+              Regenerate
             </button>
             <button className="ghost-button ghost-button-secondary" type="button" onClick={onLogout}>
               Logout
@@ -121,13 +171,16 @@ function TravelItinerary({ tripData, onEditPlan, onLogout, onBackToMenu }) {
             <h2>{destination} in motion</h2>
             <p>
               Built around a {BUDGET_LABELS[trip.budget] || 'custom'} pace, this itinerary balances landmarks,
-              great meals, and room to breathe between highlights.
+              meals, and breathing room between highlights.
             </p>
 
             <div className="chip-row">
-              <span className="pill">{formatDate(trip.startDate)} - {formatDate(trip.endDate)}</span>
+              <span className="pill">
+                {formatDate(trip.startDate)} - {formatDate(trip.endDate)}
+              </span>
               <span className="pill">From {departureCity}</span>
               <span className="pill">{BUDGET_LABELS[trip.budget] || 'Custom budget'}</span>
+              <span className="pill">Status: {trip.status || 'generated'}</span>
             </div>
           </div>
 
@@ -135,12 +188,12 @@ function TravelItinerary({ tripData, onEditPlan, onLogout, onBackToMenu }) {
             <div className="metric-card accent-card">
               <span className="metric-label">Length</span>
               <strong>{tripLength} days</strong>
-              <p>Enough time for a headline experience and a slow afternoon.</p>
+              <p>Enough room for one major anchor and a slower supporting rhythm.</p>
             </div>
             <div className="metric-card">
-              <span className="metric-label">Focus</span>
-              <strong>{interests[0]}</strong>
-              <p>Primary travel theme that shapes the daily rhythm.</p>
+              <span className="metric-label">Last updated</span>
+              <strong>{formatDateTime(trip.updatedAt)}</strong>
+              <p>Regenerating updates the itinerary emphasis and preserves the trip request.</p>
             </div>
           </div>
         </section>
@@ -155,7 +208,7 @@ function TravelItinerary({ tripData, onEditPlan, onLogout, onBackToMenu }) {
                   <p className="section-label">Daily plan</p>
                   <h3>Suggested rhythm</h3>
                 </div>
-                <span className="section-badge">Curated by TrippyAI</span>
+                <span className="section-badge">Generated by TripAI</span>
               </div>
 
               <div className="timeline">
@@ -176,9 +229,9 @@ function TravelItinerary({ tripData, onEditPlan, onLogout, onBackToMenu }) {
                 <p className="section-label">Need-to-book</p>
                 <h3>Priority reservations</h3>
                 <ul className="checklist">
-                  <li>Museum or landmark entry for the first full day</li>
-                  <li>One dinner reservation with a strong local menu</li>
-                  <li>Transit pass or airport transfer before arrival</li>
+                  <li>One entry-based attraction for the first full day</li>
+                  <li>A dinner reservation or headline meal slot</li>
+                  <li>Airport transfer, transit pass, or arrival logistics</li>
                 </ul>
               </article>
 
@@ -208,9 +261,7 @@ function TravelItinerary({ tripData, onEditPlan, onLogout, onBackToMenu }) {
             <article className="panel side-card highlight-card">
               <p className="section-label">Interest mix</p>
               <h3>{interests.join(' + ')}</h3>
-              <p>
-                Keep this balance in the itinerary so the trip feels intentional instead of overpacked.
-              </p>
+              <p>These saved preferences shape the overall pacing and the types of stops TripAI emphasizes.</p>
               <div className="interest-tags">
                 {interests.map((interest) => (
                   <span key={interest} className="interest-tag">
@@ -224,10 +275,10 @@ function TravelItinerary({ tripData, onEditPlan, onLogout, onBackToMenu }) {
               <p className="section-label">Travel flow</p>
               <h3>Suggested anchors</h3>
               <ul className="route-list">
-                <li>Airport transfer and hotel drop-off</li>
-                <li>Old town or central district orientation walk</li>
-                <li>One sunset viewpoint and one late meal</li>
-                <li>Open morning for a cafe or slow start</li>
+                <li>Arrival reset and neighborhood orientation walk</li>
+                <li>One midday attraction that defines the day</li>
+                <li>One flexible recovery block before evening plans</li>
+                <li>One strong closing moment each night</li>
               </ul>
             </article>
           </aside>
