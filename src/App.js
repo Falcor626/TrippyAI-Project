@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from './supabaseClient';
 import Login from './Components/login';
 import SignUp from './Components/signUp';
@@ -35,6 +35,7 @@ function mapTripRowToForm(row) {
 }
 
 function App() {
+  const initializedUserIdRef = useRef(null);
   const [showLogin, setShowLogin] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
@@ -72,12 +73,25 @@ function App() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
 
+      // Ignore background auth events that should not change app routing.
+      if (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+        if (isInitializing) {
+          setIsInitializing(false);
+        }
+        return;
+      }
+
       if (session?.user) {
-        await initializeUserState(session.user);
+        // Avoid duplicate initialization for the same user from repeated auth events.
+        if (initializedUserIdRef.current !== session.user.id) {
+          await initializeUserState(session.user);
+          initializedUserIdRef.current = session.user.id;
+        }
       } else {
+        initializedUserIdRef.current = null;
         resetToLoggedOutState();
       }
 
@@ -126,52 +140,52 @@ function App() {
     };
 
     try {
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
       const upsertPromise = supabase.from('userProfiles').upsert(profileSeed, { onConflict: 'id' });
-
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000));
 
       await Promise.race([upsertPromise, timeoutPromise]);
     } catch (error) {
-      console.error('[ensureUserProfileRow] Error:', error.message);
+      console.warn('[ensureUserProfileRow] Error (non-blocking):', error.message);
+      // Non-critical operation - continue even if it fails
     }
   };
 
   const loadUserProfile = async (userId) => {
     try {
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
+
       const selectPromise = supabase.from('userProfiles').select('avatar_url').eq('id', userId).maybeSingle();
-
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000));
-
       const result = await Promise.race([selectPromise, timeoutPromise]);
       const { data: profile, error } = result;
 
       if (error) {
-        console.error('[loadUserProfile] Error:', error);
+        console.warn('[loadUserProfile] Error (non-blocking):', error.message);
         return;
       }
 
       setAvatarUrl(profile?.avatar_url || null);
     } catch (error) {
-      console.error('[loadUserProfile] Error:', error.message);
+      console.warn('[loadUserProfile] Error (non-blocking):', error.message);
+      // Non-critical operation - continue even if it fails
     }
   };
 
   const getQuestionnaireDefaults = async (userId) => {
     try {
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
+
       const selectPromise = supabase
         .from('traveler_preferences')
         .select('preferred_departure_city, preferred_budget, preferred_interests')
         .eq('user_id', userId)
         .maybeSingle();
 
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000));
-
       const result = await Promise.race([selectPromise, timeoutPromise]);
       const { data: preferences, error } = result;
 
       if (error) {
-        console.error('[getQuestionnaireDefaults] Error:', error);
-        return { defaults: emptyQuestionnaire, hasPreferences: false };
+        console.warn('[getQuestionnaireDefaults] Error (non-critical):', error.message);
+        return { defaults: emptyQuestionnaire, hasPreferences: false, resolved: false };
       }
 
       const hasPreferences = Boolean(
@@ -182,6 +196,7 @@ function App() {
 
       return {
         hasPreferences,
+        resolved: true,
         defaults: {
           ...emptyQuestionnaire,
           departureCity: preferences?.preferred_departure_city || '',
@@ -190,8 +205,29 @@ function App() {
         },
       };
     } catch (error) {
-      console.error('[getQuestionnaireDefaults] Error:', error.message);
-      return { defaults: emptyQuestionnaire, hasPreferences: false };
+      console.warn('[getQuestionnaireDefaults] Error (non-critical):', error.message);
+      return { defaults: emptyQuestionnaire, hasPreferences: false, resolved: false };
+    }
+  };
+
+  const userHasSavedTrips = async (userId) => {
+    try {
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
+
+      const selectPromise = supabase.from('trip_requests').select('id').eq('user_id', userId).limit(1);
+
+      const result = await Promise.race([selectPromise, timeoutPromise]);
+      const { data, error } = result;
+
+      if (error) {
+        console.warn('[userHasSavedTrips] Error (non-critical):', error.message);
+        return { hasTrips: false, resolved: false };
+      }
+
+      return { hasTrips: Array.isArray(data) && data.length > 0, resolved: true };
+    } catch (error) {
+      console.warn('[userHasSavedTrips] Error (non-critical):', error.message);
+      return { hasTrips: false, resolved: false };
     }
   };
 
@@ -199,20 +235,51 @@ function App() {
     setIsLoggedIn(true);
     setShowLogin(true);
     setQuestionnaireError('');
-
-    await ensureUserProfileRow(user);
-    await loadUserProfile(user.id);
-
-    const { defaults, hasPreferences } = await getQuestionnaireDefaults(user.id);
-    setQuestionnaireDefaults(defaults);
     setActiveTrip(null);
     setEditingTripId(null);
 
-    if (!hasPreferences) {
-      setQuestionnaireMode('onboarding');
-      setShowQuestionnaire(true);
-      setShowSavedTrips(false);
-    } else {
+    try {
+      // Safety timeout: if initialization takes longer than 15 seconds, proceed anyway
+      const initPromise = Promise.all([
+        ensureUserProfileRow(user),
+        loadUserProfile(user.id),
+        getQuestionnaireDefaults(user.id),
+        userHasSavedTrips(user.id),
+      ]);
+
+      const timeoutPromise = new Promise((resolve) =>
+        setTimeout(() => {
+          console.warn('[initializeUserState] Initialization timeout - proceeding with defaults');
+          resolve([
+            undefined,
+            undefined,
+            { defaults: emptyQuestionnaire, hasPreferences: false, resolved: false },
+            { hasTrips: false, resolved: false },
+          ]);
+        }, 15000)
+      );
+
+      const [, , questionnaireResult, tripCheckResult] = await Promise.race([initPromise, timeoutPromise]);
+
+      const { defaults, hasPreferences, resolved: preferencesResolved } = questionnaireResult;
+      const { hasTrips, resolved: tripsResolved } = tripCheckResult;
+      setQuestionnaireDefaults(defaults);
+
+      // Only show onboarding when both checks completed successfully and confirm the user is new.
+      const shouldShowOnboarding = preferencesResolved && tripsResolved && !hasPreferences && !hasTrips;
+
+      if (shouldShowOnboarding) {
+        setQuestionnaireMode('onboarding');
+        setShowQuestionnaire(true);
+        setShowSavedTrips(false);
+      } else {
+        setShowQuestionnaire(false);
+        setShowSavedTrips(false);
+        setQuestionnaireMode('trip');
+      }
+    } catch (error) {
+      console.error('[initializeUserState] Unexpected error:', error);
+      // Fallback: show main menu
       setShowQuestionnaire(false);
       setShowSavedTrips(false);
       setQuestionnaireMode('trip');
@@ -225,7 +292,8 @@ function App() {
     } = await supabase.auth.getUser();
 
     if (user) {
-      await initializeUserState(user);
+      setIsLoggedIn(true);
+      setShowLogin(true);
     }
   };
 
