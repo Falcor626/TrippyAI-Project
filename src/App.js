@@ -52,6 +52,29 @@ function App() {
   const [activeTrip, setActiveTrip] = useState(null);
   const [editingTripId, setEditingTripId] = useState(null);
 
+  const resolveAvatarUrl = (value) => {
+    if (!value || typeof value !== 'string') {
+      return null;
+    }
+
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      return null;
+    }
+
+    if (/^https?:\/\//i.test(trimmed)) {
+      return trimmed;
+    }
+
+    const normalizedPath = trimmed
+      .replace(/^\/+/, '')
+      .replace(/^profile-pictures\//, '');
+
+    const { data } = supabase.storage.from('profile-pictures').getPublicUrl(normalizedPath);
+    return data?.publicUrl || null;
+  };
+
   useEffect(() => {
     const savedDarkMode = localStorage.getItem('darkMode');
     if (savedDarkMode && JSON.parse(savedDarkMode)) {
@@ -151,11 +174,19 @@ function App() {
   };
 
   const loadUserProfile = async (userId) => {
-    try {
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
-
+    const fetchAvatar = async (withTimeout = true) => {
       const selectPromise = supabase.from('userProfiles').select('avatar_url').eq('id', userId).maybeSingle();
-      const result = await Promise.race([selectPromise, timeoutPromise]);
+
+      if (!withTimeout) {
+        return selectPromise;
+      }
+
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
+      return Promise.race([selectPromise, timeoutPromise]);
+    };
+
+    try {
+      const result = await fetchAvatar(true);
       const { data: profile, error } = result;
 
       if (error) {
@@ -163,10 +194,23 @@ function App() {
         return;
       }
 
-      setAvatarUrl(profile?.avatar_url || null);
+      setAvatarUrl(resolveAvatarUrl(profile?.avatar_url));
     } catch (error) {
       console.warn('[loadUserProfile] Error (non-blocking):', error.message);
-      // Non-critical operation - continue even if it fails
+
+      // Retry once in the background without timeout to recover from temporary latency spikes.
+      setTimeout(async () => {
+        try {
+          const retryResult = await fetchAvatar(false);
+          if (retryResult?.error) {
+            return;
+          }
+
+          setAvatarUrl(resolveAvatarUrl(retryResult?.data?.avatar_url));
+        } catch (retryError) {
+          console.warn('[loadUserProfile] Retry failed:', retryError.message);
+        }
+      }, 1200);
     }
   };
 
@@ -298,7 +342,7 @@ function App() {
   };
 
   const onAvatarUpdate = (newAvatarUrl) => {
-    setAvatarUrl(newAvatarUrl);
+    setAvatarUrl(resolveAvatarUrl(newAvatarUrl));
   };
 
   const handleLogout = async () => {
@@ -521,7 +565,16 @@ function App() {
         </button>
         {isLoggedIn && (
           <button className="profile-btn profile-right" onClick={toggleProfile} title="Profile">
-            {avatarUrl ? <img src={avatarUrl} alt="Profile" className="profile-avatar" /> : '👤'}
+            {avatarUrl ? (
+              <img
+                src={`${avatarUrl}${avatarUrl.includes('?') ? '&' : '?'}v=1`}
+                alt="Profile"
+                className="profile-avatar"
+                onError={() => setAvatarUrl(null)}
+              />
+            ) : (
+              '👤'
+            )}
           </button>
         )}
       </div>
