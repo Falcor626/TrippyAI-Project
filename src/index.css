@@ -105,6 +105,35 @@ html[data-theme="dark"] .nav-icon-btn:hover {
   align-items: center;
 }
 
+.logout-top-left {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  border: 2px solid #3a6ea5;
+  border-radius: 999px;
+  background: transparent;
+  color: #3a6ea5;
+  font-weight: 600;
+  padding: 0.55rem 0.95rem;
+  cursor: pointer;
+  transition: transform 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.logout-top-left:hover {
+  transform: scale(1.03);
+  border-color: #2f5b88;
+  color: #2f5b88;
+}
+
+html[data-theme="dark"] .logout-top-left {
+  border-color: #6f9bc9;
+  color: #ffffff;
+}
+
+html[data-theme="dark"] .logout-top-left:hover {
+  border-color: #9fc0e1;
+}
+
 .profile-right {
   margin-left: 10px;
 }

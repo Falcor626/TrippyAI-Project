@@ -139,7 +139,7 @@ const buildItinerary = (trip) => {
   });
 };
 
-function TravelItinerary({ tripData, onLogout }) {
+function TravelItinerary({ tripData }) {
   const trip = tripData || {};
   const destination = trip.destination || 'Lisbon, Portugal';
   const departureCity = trip.departureCity || 'New York, NY';
@@ -240,11 +240,6 @@ function TravelItinerary({ tripData, onLogout }) {
             </p>
           </div>
 
-          <div className="topbar-actions">
-            <button className="ghost-button ghost-button-secondary" type="button" onClick={onLogout}>
-              Logout
-            </button>
-          </div>
         </header>
 
         <section className="hero-card">
