@@ -2,17 +2,6 @@ const USER_AGENT = 'TripAI/1.0 (educational project)';
 const NOMINATIM_COOLDOWN_MS = 1100;
 let lastNominatimRequestAt = 0;
 
-const INTEREST_TO_TAGS = {
-  adventure: ['theme_park', 'climbing', 'viewpoint'],
-  culture: ['museum', 'gallery', 'artwork', 'monument'],
-  food: ['marketplace', 'food_court', 'attraction'],
-  nature: ['zoo', 'aquarium', 'botanical_garden', 'viewpoint'],
-  nightlife: ['attraction'],
-  relaxation: ['spa_resort', 'beach_resort', 'viewpoint'],
-  shopping: ['mall', 'marketplace'],
-  photography: ['viewpoint', 'artwork', 'monument'],
-};
-
 const safeJsonFetch = async (url, options = {}) => {
   const response = await fetch(url, {
     ...options,
@@ -27,19 +16,6 @@ const safeJsonFetch = async (url, options = {}) => {
   }
 
   return response.json();
-};
-
-const toRadians = (value) => (Number(value) * Math.PI) / 180;
-
-const getDistanceMeters = (lat1, lon1, lat2, lon2) => {
-  const earthRadius = 6371000;
-  const dLat = toRadians(lat2 - lat1);
-  const dLon = toRadians(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return earthRadius * c;
 };
 
 const extractPrimaryLabel = (item) => {
@@ -78,63 +54,129 @@ const uniqueSuggestions = (items) => {
   });
 };
 
+const normalizeFreeText = (value = '') =>
+  value
+    .toLowerCase()
+    .replace(/[.,]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const levenshteinDistance = (a = '', b = '') => {
+  const rows = a.length + 1;
+  const cols = b.length + 1;
+  const matrix = Array.from({ length: rows }, () => new Array(cols).fill(0));
+
+  for (let i = 0; i < rows; i += 1) matrix[i][0] = i;
+  for (let j = 0; j < cols; j += 1) matrix[0][j] = j;
+
+  for (let i = 1; i < rows; i += 1) {
+    for (let j = 1; j < cols; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost
+      );
+    }
+  }
+
+  return matrix[a.length][b.length];
+};
+
+const similarityScore = (a = '', b = '') => {
+  if (!a || !b) return 0;
+  const distance = levenshteinDistance(a, b);
+  const maxLen = Math.max(a.length, b.length);
+  return maxLen === 0 ? 1 : 1 - distance / maxLen;
+};
+
 const isStrongLocationMatch = (query, suggestion) => {
-  const trimmed = (query || '').trim().toLowerCase();
-  if (!trimmed || !suggestion) return false;
+  const normalizedQuery = normalizeFreeText(query);
+  if (!normalizedQuery || !suggestion) return false;
 
-  const primary = (suggestion.primaryLabel || '').toLowerCase();
-  const display = (suggestion.displayName || '').toLowerCase();
-  const normalizedQuery = trimmed.replace(/[.,]/g, ' ').replace(/\s+/g, ' ').trim();
+  const primary = normalizeFreeText(suggestion.primaryLabel || '');
+  const display = normalizeFreeText(suggestion.displayName || '');
+  const firstSegment = normalizeFreeText((suggestion.displayName || '').split(',')[0] || '');
 
-  if (primary.startsWith(normalizedQuery)) return true;
-  if (display.startsWith(normalizedQuery)) return true;
-  if (normalizedQuery.length >= 5 && display.includes(normalizedQuery)) return true;
+  if (!primary && !display) return false;
 
-  const tokens = normalizedQuery.split(' ').filter(Boolean);
-  return tokens.length > 0 && tokens.every((token) => display.includes(token));
+  if (primary === normalizedQuery || firstSegment === normalizedQuery) {
+    return true;
+  }
+
+  if (
+    primary.startsWith(normalizedQuery) ||
+    normalizedQuery.startsWith(primary) ||
+    display.startsWith(normalizedQuery)
+  ) {
+    return true;
+  }
+
+  return similarityScore(normalizedQuery, primary || firstSegment || display) >= 0.74;
+};
+
+const looksCanonicalEnoughToAutofill = (query, suggestion, suggestions = []) => {
+  if (!suggestion) return false;
+  if (isStrongLocationMatch(query, suggestion)) return true;
+  if (suggestions.length === 1) return true;
+
+  const second = suggestions[1];
+  if (!second) return false;
+
+  const bestScore = similarityScore(normalizeFreeText(query), normalizeFreeText(suggestion.primaryLabel || suggestion.displayName));
+  const secondScore = similarityScore(normalizeFreeText(query), normalizeFreeText(second.primaryLabel || second.displayName));
+  return bestScore >= 0.72 && bestScore - secondScore >= 0.12;
 };
 
 export const waitForNominatimCooldown = async () => {
-  const now = Date.now();
-  const elapsed = now - lastNominatimRequestAt;
+  const elapsed = Date.now() - lastNominatimRequestAt;
   if (elapsed < NOMINATIM_COOLDOWN_MS) {
     await new Promise((resolve) => setTimeout(resolve, NOMINATIM_COOLDOWN_MS - elapsed));
   }
-  lastNominatimRequestAt = Date.now();
 };
 
-export const searchLocations = async (query, options = {}) => {
-  const trimmed = (query || '').trim();
-  const limit = options.limit || 5;
-
-  if (!trimmed) {
-    return [];
-  }
+export const searchLocations = async (query, { limit = 5 } = {}) => {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
 
   await waitForNominatimCooldown();
-  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=${limit}&q=${encodeURIComponent(trimmed)}`;
-  const results = await safeJsonFetch(url, {
-    headers: { 'User-Agent': USER_AGENT },
+  lastNominatimRequestAt = Date.now();
+
+  const url =
+    'https://nominatim.openstreetmap.org/search?' +
+    new URLSearchParams({
+      q: trimmed,
+      format: 'jsonv2',
+      addressdetails: '1',
+      limit: String(limit),
+      dedupe: '1',
+      'accept-language': 'en',
+    }).toString();
+
+  const data = await safeJsonFetch(url, {
+    headers: {
+      'Accept-Language': 'en-US,en;q=0.9',
+      'User-Agent': USER_AGENT,
+    },
   });
 
-  if (!Array.isArray(results)) {
-    return [];
-  }
-
-  return uniqueSuggestions(results.map(normalizeSuggestion));
+  return uniqueSuggestions((data || []).map(normalizeSuggestion));
 };
 
-export const validateLocation = async (query) => {
-  const trimmed = (query || '').trim();
+export const validateLocation = async (query, options = {}) => {
+  const trimmed = query.trim();
+  const { autoSelect = false } = options;
+
   if (!trimmed) {
     return {
       isValid: false,
-      message: 'Location is required.',
+      message: 'Enter a city, state, or country.',
       normalizedName: '',
       lat: null,
       lon: null,
       place: null,
       suggestions: [],
+      autoSelected: false,
     };
   }
 
@@ -150,22 +192,26 @@ export const validateLocation = async (query) => {
         lon: null,
         place: null,
         suggestions: [],
+        autoSelected: false,
       };
     }
 
     const bestMatch = suggestions[0];
     const isValid = isStrongLocationMatch(trimmed, bestMatch);
+    const autoSelected = autoSelect && looksCanonicalEnoughToAutofill(trimmed, bestMatch, suggestions);
 
     return {
-      isValid,
-      message: isValid
-        ? `Matched to ${bestMatch.displayName}`
-        : 'Choose one of the suggested locations for a clearer match.',
+      isValid: isValid || autoSelected,
+      message:
+        isValid || autoSelected
+          ? `Matched to ${bestMatch.displayName}`
+          : 'Choose one of the suggested locations for a clearer match.',
       normalizedName: bestMatch.displayName,
       lat: bestMatch.lat,
       lon: bestMatch.lon,
       place: bestMatch,
       suggestions,
+      autoSelected,
     };
   } catch (error) {
     return {
@@ -176,6 +222,7 @@ export const validateLocation = async (query) => {
       lon: null,
       place: null,
       suggestions: [],
+      autoSelected: false,
     };
   }
 };
@@ -187,7 +234,7 @@ export const getWeatherPreview = async (location) => {
   let endDate = null;
 
   if (typeof location === 'string') {
-    const validated = await validateLocation(location);
+    const validated = await validateLocation(location, { autoSelect: true });
     lat = validated.lat;
     lon = validated.lon;
   } else {
@@ -207,6 +254,7 @@ export const getWeatherPreview = async (location) => {
     const url =
       `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
       `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max` +
+      `&temperature_unit=fahrenheit` +
       `&start_date=${forecastStart}&end_date=${forecastEnd}&timezone=auto`;
 
     const data = await safeJsonFetch(url);
@@ -228,83 +276,11 @@ export const getWeatherPreview = async (location) => {
   }
 };
 
-export const getAttractionPreview = async (location) => {
-  let lat = null;
-  let lon = null;
-  let interests = [];
-  let limit = 5;
-
-  if (typeof location === 'string') {
-    const validated = await validateLocation(location);
-    lat = validated.lat;
-    lon = validated.lon;
-  } else {
-    lat = location?.lat ?? null;
-    lon = location?.lon ?? null;
-    interests = location?.interests || [];
-    limit = location?.limit || 5;
-  }
-
-  if (lat == null || lon == null) {
-    return [];
-  }
-
-  try {
-    const tagPool = interests.flatMap((interest) => INTEREST_TO_TAGS[interest] || []);
-    const selectedTags = [...new Set(tagPool)].slice(0, 6);
-    const tourismClauses = selectedTags.length
-      ? selectedTags
-          .map(
-            (tag) => `        node["tourism"="${tag}"](around:6500,${lat},${lon});\n        way["tourism"="${tag}"](around:6500,${lat},${lon});\n        relation["tourism"="${tag}"](around:6500,${lat},${lon});`
-          )
-          .join('\n')
-      : `        node["tourism"](around:6500,${lat},${lon});\n        way["tourism"](around:6500,${lat},${lon});\n        relation["tourism"](around:6500,${lat},${lon});`;
-
-    const overpassQuery = `
-      [out:json][timeout:25];
-      (
-${tourismClauses}
-      );
-      out tags center 25;
-    `;
-
-    const data = await safeJsonFetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-      body: overpassQuery,
-    });
-
-    const attractions = Array.isArray(data?.elements)
-      ? data.elements
-          .map((item) => {
-            const itemLat = item.lat ?? item.center?.lat ?? null;
-            const itemLon = item.lon ?? item.center?.lon ?? null;
-            const name = item?.tags?.name;
-            if (!name || itemLat == null || itemLon == null) return null;
-            return {
-              id: `${item.type}-${item.id}`,
-              name,
-              source: item?.tags?.tourism || item?.tags?.historic || 'point of interest',
-              distanceMeters: getDistanceMeters(Number(lat), Number(lon), Number(itemLat), Number(itemLon)),
-            };
-          })
-          .filter(Boolean)
-          .sort((a, b) => a.distanceMeters - b.distanceMeters)
-          .slice(0, limit)
-      : [];
-
-    return attractions;
-  } catch (error) {
-    return [];
-  }
-};
-
 const travelApi = {
   searchLocations,
   validateLocation,
   getWeatherPreview,
   waitForNominatimCooldown,
-  getAttractionPreview,
 };
 
 export default travelApi;
