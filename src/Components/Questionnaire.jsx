@@ -26,6 +26,8 @@ const BUDGETS = [
 ];
 
 const emptyForm = {
+  planName: '',
+  travelerCount: 1,
   destination: '',
   departureCity: '',
   startDate: '',
@@ -356,6 +358,10 @@ function Questionnaire({
   const validate = async () => {
     const newErrors = {};
 
+    if (!form.planName.trim()) newErrors.planName = 'Please name this travel plan.';
+    if (!Number.isFinite(Number(form.travelerCount)) || Number(form.travelerCount) < 1) {
+      newErrors.travelerCount = 'Traveler count must be at least 1.';
+    }
     if (!form.destination.trim()) newErrors.destination = 'Please enter a destination.';
     if (!form.departureCity.trim()) newErrors.departureCity = 'Please enter a departure city.';
     if (!form.startDate) newErrors.startDate = 'Please select a start date.';
@@ -413,6 +419,42 @@ function Questionnaire({
         {submitError && <div className="q-error-banner">{submitError}</div>}
 
         <div className="q-body">
+          <div className="q-row">
+            <div className="q-field">
+              <label className="q-label" htmlFor="planName">
+                <span className="q-label-icon">📝</span> Travel Plan Name
+              </label>
+              <input
+                id="planName"
+                className={`q-input ${errors.planName ? 'q-input-error' : ''}`}
+                type="text"
+                placeholder="e.g. Summer in Tokyo"
+                value={form.planName}
+                disabled={isSubmitting}
+                onChange={(e) => updateField('planName', e.target.value)}
+                maxLength={80}
+              />
+              {errors.planName && <span className="q-error">{errors.planName}</span>}
+            </div>
+
+            <div className="q-field">
+              <label className="q-label" htmlFor="travelerCount">
+                <span className="q-label-icon">👥</span> Number of Travelers
+              </label>
+              <input
+                id="travelerCount"
+                className={`q-input ${errors.travelerCount ? 'q-input-error' : ''}`}
+                type="number"
+                min="1"
+                step="1"
+                value={form.travelerCount}
+                disabled={isSubmitting}
+                onChange={(e) => updateField('travelerCount', Math.max(1, Number(e.target.value) || 1))}
+              />
+              {errors.travelerCount && <span className="q-error">{errors.travelerCount}</span>}
+            </div>
+          </div>
+
           <div className="q-row">
             <div className="q-field">
               <label className="q-label">
