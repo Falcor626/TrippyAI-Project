@@ -249,6 +249,19 @@ function App() {
     setEditingTripId(null);
     setShowSavedTrips(true);
     setShowQuestionnaire(false);
+    setShowProfile(false);
+    setShowSettings(false);
+  };
+
+  const handleGoToMainMenu = () => {
+    setActiveTrip(null);
+    setEditingTripId(null);
+    setShowQuestionnaire(false);
+    setShowSavedTrips(false);
+    setShowProfile(false);
+    setShowSettings(false);
+    setQuestionnaireError('');
+    setQuestionnaireMode('trip');
   };
 
   const handleStartPlan = async (tripToEdit = null) => {
@@ -281,6 +294,8 @@ function App() {
     setQuestionnaireMode('trip');
     setQuestionnaireError('');
     setShowSavedTrips(false);
+    setShowProfile(false);
+    setShowSettings(false);
     setActiveTrip(null);
     setShowQuestionnaire(true);
   };
@@ -424,13 +439,23 @@ function App() {
       <h1 className="app-title">TrippyAI</h1>
       <div className="icon-buttons">
         {isLoggedIn && (
-          <button className="profile-btn" onClick={toggleProfile} title="Profile">
+          <>
+            <button className="nav-icon-btn" onClick={handleGoToMainMenu} title="Main Menu">
+              🏠
+            </button>
+            <button className="nav-icon-btn" onClick={handleViewPlans} title="Saved Trips">
+              ✈️
+            </button>
+          </>
+        )}
+        <button className="settings-btn nav-icon-btn" onClick={toggleSettings} title="Settings">
+          ⚙️
+        </button>
+        {isLoggedIn && (
+          <button className="profile-btn profile-right" onClick={toggleProfile} title="Profile">
             {avatarUrl ? <img src={avatarUrl} alt="Profile" className="profile-avatar" /> : '👤'}
           </button>
         )}
-        <button className="settings-btn" onClick={toggleSettings} title="Settings">
-          ⚙️
-        </button>
       </div>
       {showResetPassword ? (
         <ResetPassword onResetComplete={handleResetComplete} />

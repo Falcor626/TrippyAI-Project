@@ -147,14 +147,12 @@ function Questionnaire({
   const [focusedField, setFocusedField] = useState('');
 
   useEffect(() => {
-    setForm({ ...emptyForm, ...initialValues });
+    setForm({ ...emptyForm, ...initialValues, departureCity: '' });
     setLocationStates({
       destination: initialValues.destination
         ? { ...emptyLocationState, status: 'idle', message: 'Re-checking destination…' }
         : emptyLocationState,
-      departureCity: initialValues.departureCity
-        ? { ...emptyLocationState, status: 'idle', message: 'Re-checking departure city…' }
-        : emptyLocationState,
+      departureCity: emptyLocationState,
     });
   }, [initialValues]);
 
