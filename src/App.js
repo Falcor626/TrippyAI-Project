@@ -48,35 +48,28 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const bootstrapSession = async () => {
-      setIsInitializing(true);
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (session?.user) {
-        await initializeUserState(session.user);
-      } else {
-        setIsLoggedIn(false);
-        setShowLogin(true);
-      }
-
-      setIsInitializing(false);
-    };
-
-    bootstrapSession();
+    // Don't try to getSession() - it's slow. Just rely on onAuthStateChange
+    // which will fire immediately with the current session state.
+    let mounted = true;
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!mounted) return;
+      
       if (session?.user) {
         await initializeUserState(session.user);
       } else {
         resetToLoggedOutState();
       }
+      
+      setIsInitializing(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const toggleForm = () => {
@@ -110,57 +103,86 @@ function App() {
       full_name: user.user_metadata?.full_name || null,
     };
 
-    const { error } = await supabase
-      .from('userProfiles')
-      .upsert(profileSeed, { onConflict: 'id' });
-
-    if (error && error.code !== '23505') {
-      console.error('Error seeding user profile:', error);
+    try {
+      const upsertPromise = supabase
+        .from('userProfiles')
+        .upsert(profileSeed, { onConflict: 'id' });
+      
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), 10000)
+      );
+      
+      await Promise.race([upsertPromise, timeoutPromise]);
+    } catch (error) {
+      console.error('[ensureUserProfileRow] Error:', error.message);
     }
   };
 
   const loadUserProfile = async (userId) => {
-    const { data: profile, error } = await supabase
-      .from('userProfiles')
-      .select('avatar_url')
-      .eq('id', userId)
-      .maybeSingle();
+    try {
+      const selectPromise = supabase
+        .from('userProfiles')
+        .select('avatar_url')
+        .eq('id', userId)
+        .maybeSingle();
+      
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), 10000)
+      );
+      
+      const result = await Promise.race([selectPromise, timeoutPromise]);
+      const { data: profile, error } = result;
 
-    if (error) {
-      console.error('Error loading profile:', error);
-      return;
+      if (error) {
+        console.error('[loadUserProfile] Error:', error);
+        return;
+      }
+
+      setAvatarUrl(profile?.avatar_url || null);
+    } catch (error) {
+      console.error('[loadUserProfile] Error:', error.message);
     }
-
-    setAvatarUrl(profile?.avatar_url || null);
   };
 
   const getQuestionnaireDefaults = async (userId) => {
-    const { data: preferences, error } = await supabase
-      .from('traveler_preferences')
-      .select('preferred_departure_city, preferred_budget, preferred_interests')
-      .eq('user_id', userId)
-      .maybeSingle();
+    try {
+      const selectPromise = supabase
+        .from('traveler_preferences')
+        .select('preferred_departure_city, preferred_budget, preferred_interests')
+        .eq('user_id', userId)
+        .maybeSingle();
+      
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), 10000)
+      );
+      
+      const result = await Promise.race([selectPromise, timeoutPromise]);
+      const { data: preferences, error } = result;
 
-    if (error) {
-      console.error('Error loading traveler preferences:', error);
+      if (error) {
+        console.error('[getQuestionnaireDefaults] Error:', error);
+        return { defaults: emptyQuestionnaire, hasPreferences: false };
+      }
+
+      const hasPreferences = Boolean(
+        preferences?.preferred_departure_city ||
+          preferences?.preferred_budget ||
+          (preferences?.preferred_interests && preferences.preferred_interests.length > 0)
+      );
+
+      return {
+        hasPreferences,
+        defaults: {
+          ...emptyQuestionnaire,
+          departureCity: preferences?.preferred_departure_city || '',
+          budget: preferences?.preferred_budget || '',
+          interests: preferences?.preferred_interests || [],
+        },
+      };
+    } catch (error) {
+      console.error('[getQuestionnaireDefaults] Error:', error.message);
       return { defaults: emptyQuestionnaire, hasPreferences: false };
     }
-
-    const hasPreferences = Boolean(
-      preferences?.preferred_departure_city ||
-        preferences?.preferred_budget ||
-        (preferences?.preferred_interests && preferences.preferred_interests.length > 0)
-    );
-
-    return {
-      hasPreferences,
-      defaults: {
-        ...emptyQuestionnaire,
-        departureCity: preferences?.preferred_departure_city || '',
-        budget: preferences?.preferred_budget || '',
-        interests: preferences?.preferred_interests || [],
-      },
-    };
   };
 
   const initializeUserState = async (user) => {
