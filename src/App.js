@@ -573,6 +573,11 @@ function App() {
 
   return (
     <div className="App">
+      {isLoggedIn && (
+        <button className="logout-top-left" onClick={handleLogout} title="Logout">
+          Logout
+        </button>
+      )}
       <h1 className="app-title">TrippyAI</h1>
       <div className="icon-buttons">
         {isLoggedIn && (
@@ -632,10 +637,7 @@ function App() {
             onSubmit={handleQuestionnaireSubmit}
           />
         ) : activeTrip ? (
-          <TravelItinerary
-            tripData={activeTrip}
-            onLogout={handleLogout}
-          />
+          <TravelItinerary tripData={activeTrip} />
         ) : showSavedTrips ? (
           <ViewPlans
             onBackToMenu={() => setShowSavedTrips(false)}
