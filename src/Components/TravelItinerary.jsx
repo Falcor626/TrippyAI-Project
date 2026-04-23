@@ -89,16 +89,6 @@ const getTripLength = (startDate, endDate) => {
   return Math.max(3, diff + 1);
 };
 
-const formatMoney = (value) => {
-  if (value == null || Number.isNaN(Number(value))) return 'N/A';
-
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
-  }).format(Number(value));
-};
-
 const buildItinerary = (trip) => {
   const destination = trip.destination || 'your destination';
   const interests = trip.interests?.length
@@ -139,7 +129,25 @@ const buildItinerary = (trip) => {
   });
 };
 
-function TravelItinerary({ tripData, onLogout }) {
+const formatMoney = (value) => {
+  if (value == null || Number.isNaN(Number(value))) return 'N/A';
+
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(Number(value));
+};
+
+const formatDuration = (minutes) => {
+  if (!minutes || Number.isNaN(Number(minutes))) return 'Unavailable';
+  const totalMinutes = Number(minutes);
+  const hours = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+  return `${hours}h ${mins}m`;
+};
+
+function TravelItinerary({ tripData, onEditPlan, onLogout, onBackToPlans, onRegeneratePlan }) {
   const trip = tripData || {};
   const destination = trip.destination || 'Lisbon, Portugal';
   const departureCity = trip.departureCity || 'New York, NY';
@@ -154,8 +162,7 @@ function TravelItinerary({ tripData, onLogout }) {
     error: '',
     flights: [],
     priceInsights: null,
-    resolvedDeparture: null,
-    resolvedArrival: null,
+    resolvedAirports: null,
   });
 
   const flightSearchReady = useMemo(
@@ -172,8 +179,7 @@ function TravelItinerary({ tripData, onLogout }) {
         error: '',
         flights: [],
         priceInsights: null,
-        resolvedDeparture: null,
-        resolvedArrival: null,
+        resolvedAirports: null,
       });
       return undefined;
     }
@@ -184,8 +190,7 @@ function TravelItinerary({ tripData, onLogout }) {
         error: '',
         flights: [],
         priceInsights: null,
-        resolvedDeparture: null,
-        resolvedArrival: null,
+        resolvedAirports: null,
       });
 
       try {
@@ -204,8 +209,7 @@ function TravelItinerary({ tripData, onLogout }) {
           error: result.flights.length ? '' : 'No flights were returned for this route and date.',
           flights: result.flights.slice(0, 3),
           priceInsights: result.priceInsights || null,
-          resolvedDeparture: result.resolvedDeparture || null,
-          resolvedArrival: result.resolvedArrival || null,
+          resolvedAirports: result.resolvedAirports || null,
         });
       } catch (error) {
         if (cancelled) return;
@@ -215,8 +219,7 @@ function TravelItinerary({ tripData, onLogout }) {
           error: error.message || 'Unable to load live flights right now.',
           flights: [],
           priceInsights: null,
-          resolvedDeparture: null,
-          resolvedArrival: null,
+          resolvedAirports: null,
         });
       }
     };
@@ -241,6 +244,15 @@ function TravelItinerary({ tripData, onLogout }) {
           </div>
 
           <div className="topbar-actions">
+            <button className="ghost-button" type="button" onClick={onBackToPlans}>
+              Saved Trips
+            </button>
+            <button className="ghost-button" type="button" onClick={onEditPlan}>
+              Edit plan
+            </button>
+            <button className="ghost-button" type="button" onClick={onRegeneratePlan}>
+              Regenerate
+            </button>
             <button className="ghost-button ghost-button-secondary" type="button" onClick={onLogout}>
               Logout
             </button>
@@ -321,28 +333,20 @@ function TravelItinerary({ tripData, onLogout }) {
                 </p>
               )}
 
-              {flightState.loading && <p className="flight-helper-copy">Loading live flights...</p>}
+              {flightState.loading && <p className="flight-helper-copy">Resolving airports and loading live flights...</p>}
 
               {!flightState.loading && flightState.error && (
                 <p className="flight-helper-copy flight-helper-copy-error">{flightState.error}</p>
               )}
 
-              {!flightState.loading && !flightState.error && (flightState.resolvedDeparture || flightState.resolvedArrival) && (
-                <div className="flight-resolution-row">
-                  {flightState.resolvedDeparture && (
-                    <div className="metric-card flight-metric-card">
-                      <span className="metric-label">Departure match</span>
-                      <strong>{flightState.resolvedDeparture.matchedName}</strong>
-                      <p>Using {flightState.resolvedDeparture.selectedAirport?.id || 'best nearby airport'} for flight search.</p>
-                    </div>
-                  )}
-                  {flightState.resolvedArrival && (
-                    <div className="metric-card flight-metric-card">
-                      <span className="metric-label">Arrival match</span>
-                      <strong>{flightState.resolvedArrival.matchedName}</strong>
-                      <p>Using {flightState.resolvedArrival.selectedAirport?.id || 'best nearby airport'} for flight search.</p>
-                    </div>
-                  )}
+              {!flightState.loading && !flightState.error && flightState.resolvedAirports && (
+                <div className="flight-airport-row">
+                  <span>
+                    Using {flightState.resolvedAirports.departure?.code} for {departureCity}
+                  </span>
+                  <span>
+                    Using {flightState.resolvedAirports.arrival?.code} for {destination}
+                  </span>
                 </div>
               )}
 
@@ -363,7 +367,10 @@ function TravelItinerary({ tripData, onLogout }) {
                   {flightState.priceInsights?.typical_price_range?.length === 2 && (
                     <div className="metric-card flight-metric-card">
                       <span className="metric-label">Typical range</span>
-                      <strong>{formatMoney(flightState.priceInsights.typical_price_range[0])} - {formatMoney(flightState.priceInsights.typical_price_range[1])}</strong>
+                      <strong>
+                        {formatMoney(flightState.priceInsights.typical_price_range[0])} -{' '}
+                        {formatMoney(flightState.priceInsights.typical_price_range[1])}
+                      </strong>
                     </div>
                   )}
                 </div>
@@ -384,15 +391,23 @@ function TravelItinerary({ tripData, onLogout }) {
                       <div className="flight-route-grid">
                         <div>
                           <span className="flight-route-label">Depart</span>
-                          <p>{flight.departureAirport || 'TBD'}<br />{flight.departureTime || 'Time unavailable'}</p>
+                          <p>
+                            {flight.departureAirport || 'TBD'}
+                            <br />
+                            {flight.departureTime || 'Time unavailable'}
+                          </p>
                         </div>
                         <div>
                           <span className="flight-route-label">Arrive</span>
-                          <p>{flight.arrivalAirport || 'TBD'}<br />{flight.arrivalTime || 'Time unavailable'}</p>
+                          <p>
+                            {flight.arrivalAirport || 'TBD'}
+                            <br />
+                            {flight.arrivalTime || 'Time unavailable'}
+                          </p>
                         </div>
                         <div>
                           <span className="flight-route-label">Duration</span>
-                          <p>{flight.totalDuration ? `${flight.totalDuration} min` : 'Unavailable'}</p>
+                          <p>{formatDuration(flight.totalDuration)}</p>
                         </div>
                         <div>
                           <span className="flight-route-label">Stops</span>

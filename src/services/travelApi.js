@@ -1,8 +1,6 @@
 const USER_AGENT = 'TripAI/1.0 (educational project)';
 const NOMINATIM_COOLDOWN_MS = 1100;
-const SERPAPI_BASE_URL = 'https://serpapi.com/search.json';
-const SERPAPI_AUTOCOMPLETE_ENGINE = 'google_flights_autocomplete';
-const SERPAPI_KEY = process.env.REACT_APP_SERPAPI_KEY;
+const SERPAPI_PROXY_URL = process.env.REACT_APP_SERPAPI_PROXY_URL || 'http://localhost:5051/serpapi';
 let lastNominatimRequestAt = 0;
 
 const safeJsonFetch = async (url, options = {}) => {
@@ -15,10 +13,36 @@ const safeJsonFetch = async (url, options = {}) => {
   });
 
   if (!response.ok) {
-    throw new Error(`Request failed with status ${response.status}`);
+    let message = `Request failed with status ${response.status}`;
+    try {
+      const errorBody = await response.json();
+      if (errorBody?.error) message = errorBody.error;
+    } catch (error) {
+      // Keep the default status message if the body is not JSON.
+    }
+    throw new Error(message);
   }
 
-  return response.json();
+  const data = await response.json();
+  if (data?.error) {
+    throw new Error(data.error);
+  }
+
+  return data;
+};
+
+const serpApiFetch = async (params) => {
+  const searchParams = new URLSearchParams(params);
+  const url = `${SERPAPI_PROXY_URL}?${searchParams.toString()}`;
+
+  try {
+    return await safeJsonFetch(url);
+  } catch (error) {
+    if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
+      throw new Error('SerpApi proxy is not running. Start it in another terminal with: npm run serpapi-proxy');
+    }
+    throw error;
+  }
 };
 
 const extractPrimaryLabel = (item) => {
@@ -131,6 +155,45 @@ const looksCanonicalEnoughToAutofill = (query, suggestion, suggestions = []) => 
   return bestScore >= 0.72 && bestScore - secondScore >= 0.12;
 };
 
+const COMMON_AIRPORTS = {
+  'los angeles': { code: 'LAX', name: 'Los Angeles International Airport' },
+  'los angeles ca': { code: 'LAX', name: 'Los Angeles International Airport' },
+  'baldwin park': { code: 'LAX', name: 'Los Angeles International Airport' },
+  'baldwin park ca': { code: 'LAX', name: 'Los Angeles International Airport' },
+  'orange county': { code: 'SNA', name: 'John Wayne Airport' },
+  'anaheim': { code: 'SNA', name: 'John Wayne Airport' },
+  'san diego': { code: 'SAN', name: 'San Diego International Airport' },
+  'san francisco': { code: 'SFO', name: 'San Francisco International Airport' },
+  'san jose': { code: 'SJC', name: 'San Jose Mineta International Airport' },
+  'las vegas': { code: 'LAS', name: 'Harry Reid International Airport' },
+  'new york': { code: 'JFK', name: 'John F. Kennedy International Airport' },
+  'new york city': { code: 'JFK', name: 'John F. Kennedy International Airport' },
+  'brooklyn': { code: 'JFK', name: 'John F. Kennedy International Airport' },
+  'queens': { code: 'JFK', name: 'John F. Kennedy International Airport' },
+  'newark': { code: 'EWR', name: 'Newark Liberty International Airport' },
+  'chicago': { code: 'ORD', name: "Chicago O'Hare International Airport" },
+  'miami': { code: 'MIA', name: 'Miami International Airport' },
+  'orlando': { code: 'MCO', name: 'Orlando International Airport' },
+  'seattle': { code: 'SEA', name: 'Seattle-Tacoma International Airport' },
+  'denver': { code: 'DEN', name: 'Denver International Airport' },
+  'dallas': { code: 'DFW', name: 'Dallas Fort Worth International Airport' },
+  'austin': { code: 'AUS', name: 'Austin-Bergstrom International Airport' },
+  'atlanta': { code: 'ATL', name: 'Hartsfield-Jackson Atlanta International Airport' },
+  'boston': { code: 'BOS', name: 'Boston Logan International Airport' },
+  'washington dc': { code: 'DCA', name: 'Ronald Reagan Washington National Airport' },
+  'honolulu': { code: 'HNL', name: 'Daniel K. Inouye International Airport' },
+  'maui': { code: 'OGG', name: 'Kahului Airport' },
+  'tokyo': { code: 'HND', name: 'Tokyo Haneda Airport' },
+  'paris': { code: 'CDG', name: 'Charles de Gaulle Airport' },
+  'london': { code: 'LHR', name: 'Heathrow Airport' },
+  'rome': { code: 'FCO', name: 'Leonardo da Vinci-Fiumicino Airport' },
+  'barcelona': { code: 'BCN', name: 'Barcelona-El Prat Airport' },
+  'madrid': { code: 'MAD', name: 'Adolfo Suarez Madrid-Barajas Airport' },
+  'lisbon': { code: 'LIS', name: 'Humberto Delgado Airport' },
+  'amsterdam': { code: 'AMS', name: 'Amsterdam Airport Schiphol' },
+  'cancun': { code: 'CUN', name: 'Cancun International Airport' },
+};
+
 const extractAirportCode = (value = '') => {
   const trimmed = value.trim();
   if (!trimmed) return '';
@@ -140,11 +203,6 @@ const extractAirportCode = (value = '') => {
     return parentheticalMatch[1].toUpperCase();
   }
 
-  const standaloneMatch = trimmed.match(/\b([A-Za-z]{3})\b/);
-  if (standaloneMatch && trimmed.length <= 12) {
-    return standaloneMatch[1].toUpperCase();
-  }
-
   if (/^[A-Za-z]{3}$/.test(trimmed)) {
     return trimmed.toUpperCase();
   }
@@ -152,115 +210,133 @@ const extractAirportCode = (value = '') => {
   return '';
 };
 
+const normalizeAirportLookupKey = (value = '') =>
+  normalizeFreeText(value)
+    .replace(/\b(california|ca|united states|usa|us|new york state|ny)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 
-const parseDistanceMiles = (value) => {
-  if (typeof value !== 'string') return Number.POSITIVE_INFINITY;
-  const match = value.match(/([\d.]+)/);
-  return match ? Number(match[1]) : Number.POSITIVE_INFINITY;
+const getCommonAirport = (location = '') => {
+  const key = normalizeAirportLookupKey(location);
+  if (COMMON_AIRPORTS[key]) return COMMON_AIRPORTS[key];
+
+  return Object.entries(COMMON_AIRPORTS).find(([city]) => key.includes(city) || city.includes(key))?.[1] || null;
 };
 
-const scoreAirportCandidate = (airport = {}, locationQuery = '') => {
-  const normalizedQuery = normalizeFreeText(locationQuery);
-  const airportName = normalizeFreeText(airport.name || '');
-  const airportCity = normalizeFreeText(airport.city || '');
-  const distance = parseDistanceMiles(airport.distance);
+const AIRPORT_CODE_DENYLIST = new Set([
+  'API',
+  'ARE',
+  'AND',
+  'THE',
+  'FOR',
+  'NOT',
+  'COM',
+  'USA',
+  'USC',
+  'USD',
+  'GET',
+  'JSON',
+  'IATA',
+  'ICAO',
+  'FAA',
+  'GPS',
+  'PDF',
+  'URL',
+  'HTTP',
+  'WWW',
+]);
 
+const scoreAirportCandidate = (code, text) => {
+  const upperText = text.toUpperCase();
   let score = 0;
 
-  if (airportCity && normalizedQuery) {
-    if (airportCity === normalizedQuery) score += 120;
-    else if (airportCity.startsWith(normalizedQuery) || normalizedQuery.startsWith(airportCity)) score += 80;
-    else score += similarityScore(normalizedQuery, airportCity) * 70;
-  }
-
-  if (airportName && normalizedQuery) {
-    if (airportName.includes(normalizedQuery) || normalizedQuery.includes(airportName)) score += 35;
-    else score += similarityScore(normalizedQuery, airportName) * 25;
-  }
-
-  if (Number.isFinite(distance)) {
-    score += Math.max(0, 40 - distance);
-  }
+  if (upperText.includes(`(${code})`)) score += 8;
+  if (upperText.includes(`${code} AIRPORT`)) score += 5;
+  if (upperText.includes(`AIRPORT ${code}`)) score += 5;
+  if (upperText.includes('INTERNATIONAL AIRPORT')) score += 4;
+  if (upperText.includes('AIRPORT')) score += 2;
+  if (upperText.includes('IATA')) score += 2;
 
   return score;
 };
 
-const dedupeAirports = (airports = []) => {
-  const seen = new Set();
-  return airports.filter((airport) => {
-    const code = airport?.id || airport?.code;
-    if (!code || seen.has(code)) return false;
-    seen.add(code);
-    return true;
-  });
+const extractBestAirportFromText = (text = '') => {
+  const matches = [...text.toUpperCase().matchAll(/\b[A-Z]{3}\b/g)].map((match) => match[0]);
+  const candidates = matches.filter((code) => !AIRPORT_CODE_DENYLIST.has(code));
+
+  if (!candidates.length) return '';
+
+  const scored = candidates
+    .map((code) => ({ code, score: scoreAirportCandidate(code, text) }))
+    .sort((a, b) => b.score - a.score);
+
+  return scored[0]?.score > 0 ? scored[0].code : '';
 };
 
-const resolveFlightLocation = async (query) => {
-  const trimmed = (query || '').trim();
-  if (!trimmed) {
-    throw new Error('Flight search needs both a departure location and a destination.');
+const getSearchTextChunks = (data) => {
+  const chunks = [];
+
+  if (data?.answer_box) {
+    chunks.push(data.answer_box.answer, data.answer_box.snippet, data.answer_box.title);
   }
 
-  const directCode = extractAirportCode(trimmed);
+  if (data?.knowledge_graph) {
+    chunks.push(data.knowledge_graph.title, data.knowledge_graph.type, data.knowledge_graph.description);
+  }
+
+  if (Array.isArray(data?.organic_results)) {
+    data.organic_results.slice(0, 5).forEach((result) => {
+      chunks.push(result.title, result.snippet, result.displayed_link);
+    });
+  }
+
+  if (Array.isArray(data?.related_questions)) {
+    data.related_questions.slice(0, 3).forEach((result) => {
+      chunks.push(result.question, result.snippet, result.title);
+    });
+  }
+
+  return chunks.filter(Boolean);
+};
+
+const resolveAirportForLocation = async (location, role = 'location') => {
+  const directCode = extractAirportCode(location);
   if (directCode) {
-    return {
-      locationId: directCode,
-      matchedName: trimmed,
-      airports: [{ id: directCode, name: directCode, city: trimmed, distance: null }],
-      selectedAirport: { id: directCode, name: directCode, city: trimmed, distance: null },
-      source: 'direct-airport-code',
-    };
+    return { code: directCode, name: `${directCode} airport`, source: 'user input' };
   }
 
-  const url = `${SERPAPI_BASE_URL}?${new URLSearchParams({
-    engine: SERPAPI_AUTOCOMPLETE_ENGINE,
-    api_key: SERPAPI_KEY,
-    q: trimmed,
-    gl: 'us',
+  const commonAirport = getCommonAirport(location);
+  if (commonAirport) {
+    return { ...commonAirport, source: 'common airport map' };
+  }
+
+  const searchQuery = `nearest major airport to ${location} IATA code`;
+  const data = await serpApiFetch({
+    engine: 'google',
+    q: searchQuery,
+    location: 'United States',
     hl: 'en',
-    exclude_regions: 'true',
-  }).toString()}`;
+    gl: 'us',
+    google_domain: 'google.com',
+  });
 
-  const data = await safeJsonFetch(url);
-  const suggestions = Array.isArray(data?.suggestions) ? data.suggestions : [];
-  const citySuggestions = suggestions.filter((item) => item?.type === 'city' && Array.isArray(item?.airports) && item.airports.length);
-  const airportSuggestions = suggestions.filter((item) => item?.type === 'airport' && item?.id);
+  const textChunks = getSearchTextChunks(data);
+  const airportCode = extractBestAirportFromText(textChunks.join('\n'));
 
-  if (citySuggestions.length) {
-    const bestCity = [...citySuggestions]
-      .map((suggestion) => ({
-        suggestion,
-        score: similarityScore(normalizeFreeText(trimmed), normalizeFreeText(suggestion.name || ''))
-      }))
-      .sort((a, b) => b.score - a.score)[0]?.suggestion;
-
-    const rankedAirports = dedupeAirports(bestCity?.airports || [])
-      .map((airport) => ({ ...airport, _score: scoreAirportCandidate(airport, trimmed) }))
-      .sort((a, b) => b._score - a._score);
-
-    const selectedAirport = rankedAirports[0] || null;
-
-    return {
-      locationId: bestCity?.id || selectedAirport?.id || '',
-      matchedName: bestCity?.name || trimmed,
-      airports: rankedAirports.map(({ _score, ...airport }) => airport),
-      selectedAirport,
-      source: 'autocomplete-city',
-    };
+  if (!airportCode) {
+    throw new Error(`Could not determine the best airport for ${role}: ${location}. Try a more specific city, such as "Los Angeles, CA".`);
   }
 
-  if (airportSuggestions.length) {
-    const bestAirport = airportSuggestions[0];
-    return {
-      locationId: bestAirport.id,
-      matchedName: bestAirport.name || trimmed,
-      airports: [{ id: bestAirport.id, name: bestAirport.name || bestAirport.id, city: bestAirport.description || trimmed, distance: null }],
-      selectedAirport: { id: bestAirport.id, name: bestAirport.name || bestAirport.id, city: bestAirport.description || trimmed, distance: null },
-      source: 'autocomplete-airport',
-    };
-  }
+  const airportName =
+    textChunks.find((chunk) => chunk.toUpperCase().includes(`(${airportCode})`)) ||
+    textChunks.find((chunk) => chunk.toUpperCase().includes(airportCode)) ||
+    `${airportCode} airport`;
 
-  throw new Error(`Could not match "${trimmed}" to a flight-searchable city or airport.`);
+  return {
+    code: airportCode,
+    name: airportName,
+    source: 'Google Search airport lookup',
+  };
 };
 
 const parseNumber = (value) => {
@@ -427,13 +503,18 @@ export const getWeatherPreview = async (location) => {
       `&start_date=${forecastStart}&end_date=${forecastEnd}&timezone=auto`;
 
     const data = await safeJsonFetch(url);
+    const daily = data?.daily;
 
-    return (data?.daily?.time || []).map((date, index) => ({
+    if (!daily?.time?.length) {
+      return [];
+    }
+
+    return daily.time.map((date, index) => ({
       date,
-      weatherCode: data.daily.weather_code?.[index] ?? null,
-      maxTemp: data.daily.temperature_2m_max?.[index] ?? null,
-      minTemp: data.daily.temperature_2m_min?.[index] ?? null,
-      precipitationChance: data.daily.precipitation_probability_max?.[index] ?? null,
+      weatherCode: daily.weather_code?.[index] ?? null,
+      tempMax: daily.temperature_2m_max?.[index] ?? null,
+      tempMin: daily.temperature_2m_min?.[index] ?? null,
+      precipitationProbability: daily.precipitation_probability_max?.[index] ?? 0,
     }));
   } catch (error) {
     return [];
@@ -449,43 +530,28 @@ export const getFlightOptions = async ({
   travelClass = 1,
   currency = 'USD',
 }) => {
-  if (!SERPAPI_KEY) {
-    throw new Error('Missing SerpApi key. Set REACT_APP_SERPAPI_KEY in your .env file.');
+  if (!departureCity || !destination || !startDate) {
+    throw new Error('Flight search needs a departure location, destination, and departure date.');
   }
 
-  const departureLocation = await resolveFlightLocation(departureCity);
-  const arrivalLocation = await resolveFlightLocation(destination);
-  const departureId = departureLocation.locationId;
-  const arrivalId = arrivalLocation.locationId;
+  const [departureAirport, arrivalAirport] = await Promise.all([
+    resolveAirportForLocation(departureCity, 'departure location'),
+    resolveAirportForLocation(destination, 'destination'),
+  ]);
 
-  if (!departureId || !arrivalId) {
-    throw new Error('Unable to resolve flight airports for the selected trip locations.');
-  }
-
-  if (!startDate) {
-    throw new Error('Flight search needs a departure date.');
-  }
-
-  const searchParams = new URLSearchParams({
+  const data = await serpApiFetch({
     engine: 'google_flights',
-    api_key: SERPAPI_KEY,
     hl: 'en',
     gl: 'us',
     currency,
-    departure_id: departureId,
-    arrival_id: arrivalId,
+    departure_id: departureAirport.code,
+    arrival_id: arrivalAirport.code,
     outbound_date: startDate,
     adults: String(Math.max(1, Number(travelerCount) || 1)),
     travel_class: String(travelClass),
     type: endDate ? '1' : '2',
+    ...(endDate ? { return_date: endDate } : {}),
   });
-
-  if (endDate) {
-    searchParams.set('return_date', endDate);
-  }
-
-  const url = `${SERPAPI_BASE_URL}?${searchParams.toString()}`;
-  const data = await safeJsonFetch(url);
 
   const bestFlights = Array.isArray(data?.best_flights) ? data.best_flights : [];
   const otherFlights = Array.isArray(data?.other_flights) ? data.other_flights : [];
@@ -496,17 +562,19 @@ export const getFlightOptions = async ({
     searchParameters: data?.search_parameters || {},
     priceInsights: data?.price_insights || {},
     airports: data?.airports || [],
+    resolvedAirports: {
+      departure: departureAirport,
+      arrival: arrivalAirport,
+    },
     flights,
-    resolvedDeparture: departureLocation,
-    resolvedArrival: arrivalLocation,
   };
 };
 
 const travelApi = {
   searchLocations,
   validateLocation,
-  waitForNominatimCooldown,
   getWeatherPreview,
+  waitForNominatimCooldown,
   getFlightOptions,
 };
 

@@ -360,6 +360,21 @@
   color: #ffb4b4;
 }
 
+.flight-airport-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.flight-airport-row span {
+  border-radius: 999px;
+  padding: 0.55rem 0.85rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(247, 244, 238, 0.86);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
 .flight-insights-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

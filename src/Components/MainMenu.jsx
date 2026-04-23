@@ -1,6 +1,6 @@
 import './MainMenu.css';
 
-function MainMenu({ onLogout, onStartPlan, onViewPlans }) {
+function MainMenu({ onLogout, onStartPlan, onViewPlans, onTrippi }) {
     return (
         <div className="menu-container">
             <h2>Main Menu</h2>
@@ -11,8 +11,8 @@ function MainMenu({ onLogout, onStartPlan, onViewPlans }) {
                 <button className="menu-btn view-plans-btn" onClick={onViewPlans}>
                     View Plans
                 </button>
-                <button className="menu-btn trippi-btn">
-                    Trippi
+                <button className="menu-btn trippi-btn" onClick={onTrippi}>
+                    Trippy
                 </button>
             </div>
             <button className="logout-btn" onClick={onLogout}>

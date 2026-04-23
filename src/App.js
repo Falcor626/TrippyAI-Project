@@ -9,6 +9,7 @@ import ResetPassword from './Components/ResetPassword';
 import Questionnaire from './Components/Questionnaire';
 import ViewPlans from './Components/ViewPlans';
 import TravelItinerary from './Components/TravelItinerary';
+import Trippi from './Components/Trippi';
 
 const emptyQuestionnaire = {
   destination: '',
@@ -45,6 +46,7 @@ function App() {
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [showQuestionnaire, setShowQuestionnaire] = useState(false);
   const [showSavedTrips, setShowSavedTrips] = useState(false);
+  const [showTrippi, setShowTrippi] = useState(false);
   const [questionnaireMode, setQuestionnaireMode] = useState('trip');
   const [questionnaireDefaults, setQuestionnaireDefaults] = useState(emptyQuestionnaire);
   const [questionnaireError, setQuestionnaireError] = useState('');
@@ -147,6 +149,7 @@ function App() {
     setShowProfile(false);
     setShowQuestionnaire(false);
     setShowSavedTrips(false);
+    setShowTrippi(false);
     setQuestionnaireMode('trip');
     setQuestionnaireDefaults(emptyQuestionnaire);
     setQuestionnaireError('');
@@ -365,6 +368,7 @@ function App() {
     setActiveTrip(null);
     setEditingTripId(null);
     setShowSavedTrips(true);
+    setShowTrippi(false);
     setShowQuestionnaire(false);
     setShowProfile(false);
     setShowSettings(false);
@@ -375,6 +379,7 @@ function App() {
     setEditingTripId(null);
     setShowQuestionnaire(false);
     setShowSavedTrips(false);
+    setShowTrippi(false);
     setShowProfile(false);
     setShowSettings(false);
     setQuestionnaireError('');
@@ -411,6 +416,7 @@ function App() {
     setQuestionnaireMode('trip');
     setQuestionnaireError('');
     setShowSavedTrips(false);
+    setShowTrippi(false);
     setShowProfile(false);
     setShowSettings(false);
     setActiveTrip(null);
@@ -506,6 +512,7 @@ function App() {
       setQuestionnaireMode('trip');
       setShowQuestionnaire(false);
       setShowSavedTrips(false);
+      setShowTrippi(false);
       setEditingTripId(null);
       setActiveTrip(mapTripRowToForm(savedTripRow));
     } catch (error) {
@@ -520,7 +527,20 @@ function App() {
   const handleSelectTrip = (trip) => {
     setActiveTrip(trip);
     setShowSavedTrips(false);
+    setShowTrippi(false);
     setShowQuestionnaire(false);
+  };
+
+
+  const handleOpenTrippi = () => {
+    setActiveTrip(null);
+    setEditingTripId(null);
+    setShowQuestionnaire(false);
+    setShowSavedTrips(false);
+    setShowProfile(false);
+    setShowSettings(false);
+    setQuestionnaireError('');
+    setShowTrippi(true);
   };
 
   const handleRegenerateTrip = async () => {
@@ -595,7 +615,9 @@ function App() {
           <p>Checking your session and travel preferences.</p>
         </div>
       ) : isLoggedIn ? (
-        showQuestionnaire ? (
+        showTrippi ? (
+          <Trippi onBack={handleGoToMainMenu} />
+        ) : showQuestionnaire ? (
           <Questionnaire
             initialValues={questionnaireDefaults}
             isOnboarding={questionnaireMode === 'onboarding'}
@@ -622,7 +644,12 @@ function App() {
             onEditPlan={handleStartPlan}
           />
         ) : (
-          <MainMenu onLogout={handleLogout} onStartPlan={() => handleStartPlan()} onViewPlans={handleViewPlans} />
+          <MainMenu
+            onLogout={handleLogout}
+            onStartPlan={() => handleStartPlan()}
+            onViewPlans={handleViewPlans}
+            onTrippi={handleOpenTrippi}
+          />
         )
       ) : showLogin ? (
         <Login toggleForm={toggleForm} onLogin={handleLogin} />
