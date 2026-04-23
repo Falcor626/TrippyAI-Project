@@ -1,11 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import './Questionnaire.css';
-import {
-  getAttractionPreview,
-  getWeatherPreview,
-  validateLocation,
-  waitForNominatimCooldown,
-} from '../services/travelApi';
+import { getWeatherPreview, validateLocation } from '../services/travelApi';
 
 const INTERESTS = [
   { id: 'adventure', label: '🧗 Adventure', desc: 'Hiking, climbing, extreme sports' },
@@ -148,19 +143,16 @@ function Questionnaire({
     loading: false,
     error: '',
     weather: [],
-    attractions: [],
   });
   const [focusedField, setFocusedField] = useState('');
 
   useEffect(() => {
-    setForm({ ...emptyForm, ...initialValues });
+    setForm({ ...emptyForm, ...initialValues, departureCity: '' });
     setLocationStates({
       destination: initialValues.destination
         ? { ...emptyLocationState, status: 'idle', message: 'Re-checking destination…' }
         : emptyLocationState,
-      departureCity: initialValues.departureCity
-        ? { ...emptyLocationState, status: 'idle', message: 'Re-checking departure city…' }
-        : emptyLocationState,
+      departureCity: emptyLocationState,
     });
   }, [initialValues]);
 
@@ -199,7 +191,7 @@ function Questionnaire({
     }));
   };
 
-  const runLocationValidation = async (field, value) => {
+  const runLocationValidation = async (field, value, options = {}) => {
     const trimmed = value.trim();
 
     if (!trimmed) {
@@ -220,13 +212,19 @@ function Questionnaire({
     }));
 
     try {
-      const result = await validateLocation(trimmed);
+      const result = await validateLocation(trimmed, { autoSelect: options?.autoSelect ?? false });
+      const canonicalValue = result.isValid && result.place ? result.place.displayName : trimmed;
       const nextState = {
         status: result.isValid ? 'valid' : 'invalid',
         message: result.message,
         place: result.place,
         suggestions: result.suggestions || [],
+        autoSelected: Boolean(result.autoSelected),
       };
+
+      if (result.isValid && result.place && canonicalValue !== value) {
+        setForm((prev) => (prev[field] === value ? { ...prev, [field]: canonicalValue } : prev));
+      }
 
       setLocationStates((prev) => ({
         ...prev,
@@ -255,7 +253,7 @@ function Questionnaire({
     if (!form.destination.trim()) return undefined;
 
     const timeoutId = window.setTimeout(() => {
-      runLocationValidation('destination', form.destination);
+      runLocationValidation('destination', form.destination, { autoSelect: false });
     }, 450);
 
     return () => window.clearTimeout(timeoutId);
@@ -265,7 +263,7 @@ function Questionnaire({
     if (!form.departureCity.trim()) return undefined;
 
     const timeoutId = window.setTimeout(() => {
-      runLocationValidation('departureCity', form.departureCity);
+      runLocationValidation('departureCity', form.departureCity, { autoSelect: false });
     }, 450);
 
     return () => window.clearTimeout(timeoutId);
@@ -280,7 +278,6 @@ function Questionnaire({
           loading: false,
           error: '',
           weather: [],
-          attractions: [],
         });
         return;
       }
@@ -300,21 +297,11 @@ function Questionnaire({
           endDate: form.endDate,
         });
 
-        await waitForNominatimCooldown();
-
-        const attractions = await getAttractionPreview({
-          lat: place.lat,
-          lon: place.lon,
-          interests: form.interests,
-          limit: 5,
-        });
-
         if (!isCancelled) {
           setTripPreview({
             loading: false,
             error: '',
             weather: weather || [],
-            attractions: attractions || [],
           });
         }
       } catch (error) {
@@ -323,7 +310,6 @@ function Questionnaire({
             loading: false,
             error: 'Preview data could not be loaded right now, but you can still save the trip.',
             weather: [],
-            attractions: [],
           });
         }
       }
@@ -334,7 +320,7 @@ function Questionnaire({
     return () => {
       isCancelled = true;
     };
-  }, [tripPreviewReady, locationStates.destination.place, form.startDate, form.endDate, form.interests]);
+  }, [tripPreviewReady, locationStates.destination.place, form.startDate, form.endDate]);
 
   const pickSuggestion = (field, suggestion) => {
     setForm((prev) => ({
@@ -349,6 +335,7 @@ function Questionnaire({
         message: `Matched to ${suggestion.displayName}`,
         place: suggestion,
         suggestions: prev[field].suggestions,
+        autoSelected: true,
       },
     }));
 
@@ -373,8 +360,8 @@ function Questionnaire({
     if (form.interests.length === 0) newErrors.interests = 'Select at least one interest.';
 
     const [destinationState, departureState] = await Promise.all([
-      runLocationValidation('destination', form.destination),
-      waitForNominatimCooldown().then(() => runLocationValidation('departureCity', form.departureCity)),
+      runLocationValidation('destination', form.destination, { autoSelect: true }),
+      runLocationValidation('departureCity', form.departureCity, { autoSelect: true }),
     ]);
 
     if (form.destination.trim() && destinationState.status !== 'valid') {
@@ -386,20 +373,33 @@ function Questionnaire({
     }
 
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return {
+      isValid: Object.keys(newErrors).length === 0,
+      destinationState,
+      departureState,
+    };
   };
 
   const handleSubmit = async () => {
-    if (!(await validate())) {
+    const validation = await validate();
+    if (!validation.isValid) {
       return;
     }
+
+    const normalizedForm = {
+      ...form,
+      destination: validation.destinationState?.place?.displayName || form.destination,
+      departureCity: validation.departureState?.place?.displayName || form.departureCity,
+    };
+
+    setForm(normalizedForm);
 
     if (onSubmit) {
-      await onSubmit(form);
+      await onSubmit(normalizedForm);
       return;
     }
 
-    alert(`Form submitted!\n${JSON.stringify(form, null, 2)}`);
+    alert(`Form submitted!\n${JSON.stringify(normalizedForm, null, 2)}`);
   };
 
   const today = new Date().toISOString().split('T')[0];
@@ -472,7 +472,7 @@ function Questionnaire({
                   onChange={(e) => updateField('destination', e.target.value)}
                   onBlur={() => {
                     window.setTimeout(() => setFocusedField((prev) => (prev === 'destination' ? '' : prev)), 120);
-                    runLocationValidation('destination', form.destination);
+                    runLocationValidation('destination', form.destination, { autoSelect: true });
                   }}
                 />
                 <LocationSuggestions
@@ -505,7 +505,7 @@ function Questionnaire({
                   onChange={(e) => updateField('departureCity', e.target.value)}
                   onBlur={() => {
                     window.setTimeout(() => setFocusedField((prev) => (prev === 'departureCity' ? '' : prev)), 120);
-                    runLocationValidation('departureCity', form.departureCity);
+                    runLocationValidation('departureCity', form.departureCity, { autoSelect: true });
                   }}
                 />
                 <LocationSuggestions
@@ -599,7 +599,7 @@ function Questionnaire({
             {errors.interests && <span className="q-error">{errors.interests}</span>}
           </div>
 
-          {(tripPreview.loading || tripPreview.error || tripPreview.weather.length > 0 || tripPreview.attractions.length > 0) && (
+          {(tripPreview.loading || tripPreview.error || tripPreview.weather.length > 0) && (
             <div className="q-preview-card">
               <div className="q-preview-header">
                 <div>
@@ -622,28 +622,9 @@ function Questionnaire({
                         <span className="q-weather-date">{formatPreviewDate(day.date)}</span>
                         <span className="q-weather-label">{weatherLabelFromCode(day.weatherCode)}</span>
                         <span className="q-weather-temp">
-                          {Math.round(day.tempMax)}° / {Math.round(day.tempMin)}°
+                          {Math.round(day.tempMax)}°F / {Math.round(day.tempMin)}°F
                         </span>
                         <span className="q-weather-rain">Rain chance: {day.precipitationProbability ?? 0}%</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {tripPreview.attractions.length > 0 && (
-                <div className="q-preview-section">
-                  <h4 className="q-preview-section-title">Nearby attractions</h4>
-                  <div className="q-attraction-list">
-                    {tripPreview.attractions.map((attraction) => (
-                      <div key={attraction.id} className="q-attraction-item">
-                        <div>
-                          <div className="q-attraction-name">{attraction.name}</div>
-                          <div className="q-attraction-meta">{attraction.source}</div>
-                        </div>
-                        <span className="q-attraction-distance">
-                          {Math.max(1, Math.round((attraction.distanceMeters || 0) / 1000 * 10) / 10)} km
-                        </span>
                       </div>
                     ))}
                   </div>

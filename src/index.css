@@ -54,7 +54,8 @@ html[data-theme="dark"] .App {
   transform: scale(1.1);
 }
 
-.profile-btn {
+.profile-btn,
+.nav-icon-btn {
   background: none;
   border: 2px solid #3a6ea5;
   cursor: pointer;
@@ -70,7 +71,8 @@ html[data-theme="dark"] .App {
   font-size: 22px;
 }
 
-.profile-btn:hover {
+.profile-btn:hover,
+.nav-icon-btn:hover {
   transform: scale(1.1);
   border-color: #2f5b88;
 }
@@ -82,6 +84,18 @@ html[data-theme="dark"] .App {
   border-radius: 50%;
 }
 
+html[data-theme="dark"] .profile-btn,
+html[data-theme="dark"] .nav-icon-btn {
+  border-color: #6f9bc9;
+  color: #ffffff;
+}
+
+html[data-theme="dark"] .profile-btn:hover,
+html[data-theme="dark"] .nav-icon-btn:hover {
+  border-color: #9fc0e1;
+}
+
+
 .icon-buttons {
   position: absolute;
   top: 20px;
@@ -90,6 +104,11 @@ html[data-theme="dark"] .App {
   gap: 10px;
   align-items: center;
 }
+
+.profile-right {
+  margin-left: 10px;
+}
+
 
 .App-logo {
   height: 40vmin;
@@ -655,4 +674,18 @@ html[data-theme="dark"] .settings-description {
 
 .toggle-checkbox:checked + .toggle-label::after {
   left: 26px;
+}
+
+
+@media (max-width: 640px) {
+  .icon-buttons {
+    position: static;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin: 0 0 20px;
+  }
+
+  .app-title {
+    margin-bottom: 16px;
+  }
 }
