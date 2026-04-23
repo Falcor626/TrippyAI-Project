@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import './Questionnaire.css';
-import { validateLocation } from '../services/travelApi';
+import { getWeatherPreview, validateLocation } from '../services/travelApi';
 
 const INTERESTS = [
   { id: 'adventure', label: '🧗 Adventure', desc: 'Hiking, climbing, extreme sports' },
@@ -106,7 +106,23 @@ function Questionnaire({
     destination: emptyLocationState,
     departureCity: emptyLocationState,
   });
+  const [tripPreview, setTripPreview] = useState({
+    loading: false,
+    error: '',
+    weather: [],
+  });
   const [focusedField, setFocusedField] = useState('');
+
+  const tripPreviewReady = useMemo(
+    () =>
+      Boolean(
+        locationStates.destination.place &&
+          form.startDate &&
+          form.endDate &&
+          locationStates.destination.status === 'valid'
+      ),
+    [locationStates.destination.place, locationStates.destination.status, form.startDate, form.endDate]
+  );
 
   useEffect(() => {
     setForm({ ...emptyForm, ...initialValues, departureCity: '' });
@@ -220,6 +236,59 @@ function Questionnaire({
     return () => window.clearTimeout(timeoutId);
   }, [form.departureCity]);
 
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadTripPreview = async () => {
+      if (!tripPreviewReady) {
+        setTripPreview({
+          loading: false,
+          error: '',
+          weather: [],
+        });
+        return;
+      }
+
+      setTripPreview((prev) => ({
+        ...prev,
+        loading: true,
+        error: '',
+      }));
+
+      try {
+        const place = locationStates.destination.place;
+        const weather = await getWeatherPreview({
+          lat: place.lat,
+          lon: place.lon,
+          startDate: form.startDate,
+          endDate: form.endDate,
+        });
+
+        if (!isCancelled) {
+          setTripPreview({
+            loading: false,
+            error: '',
+            weather: weather || [],
+          });
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          setTripPreview({
+            loading: false,
+            error: 'Preview data could not be loaded right now, but you can still save the trip.',
+            weather: [],
+          });
+        }
+      }
+    };
+
+    loadTripPreview();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [tripPreviewReady, locationStates.destination.place, form.startDate, form.endDate]);
+
   const pickSuggestion = (field, suggestion) => {
     setForm((prev) => ({
       ...prev,
@@ -293,7 +362,7 @@ function Questionnaire({
     setForm(normalizedForm);
 
     if (onSubmit) {
-      await onSubmit(normalizedForm);
+      await onSubmit(normalizedForm, tripPreview);
       return;
     }
 

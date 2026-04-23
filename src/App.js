@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from './supabaseClient';
+import { generateItinerary, saveItinerary } from './services/openaiService';
 import Login from './Components/login';
 import SignUp from './Components/signUp';
 import Settings from './Components/Settings';
@@ -423,7 +424,7 @@ function App() {
     setShowQuestionnaire(true);
   };
 
-  const handleQuestionnaireSubmit = async (formData) => {
+  const handleQuestionnaireSubmit = async (formData, tripPreview = {}) => {
     setIsSubmittingQuestionnaire(true);
     setQuestionnaireError('');
 
@@ -515,12 +516,37 @@ function App() {
       setShowTrippi(false);
       setEditingTripId(null);
       setActiveTrip(mapTripRowToForm(savedTripRow));
+
+      // Generate itinerary using OpenAI
+      if (tripPreview?.weather?.length > 0 || tripPreview?.attractions?.length > 0) {
+        handleGenerateItinerary(
+          formData,
+          savedTripRow.id,
+          tripPreview.attractions || [],
+          tripPreview.weather || []
+        );
+      }
     } catch (error) {
       console.error('Questionnaire submit error:', error);
       setQuestionnaireError(error.message || 'Failed to save your questionnaire.');
       throw error;
     } finally {
       setIsSubmittingQuestionnaire(false);
+    }
+  };
+
+  const handleGenerateItinerary = async (questionnaire, tripRequestId, attractions = [], weather = []) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Please log in to generate an itinerary');
+      
+      const itinerary = await generateItinerary(questionnaire, attractions, weather);
+      await saveItinerary(user.id, tripRequestId, itinerary, 'openai-gpt3.5');
+      
+      setActiveTrip((prev) => ({ ...prev, itinerary }));
+    } catch (error) {
+      console.error('Error generating itinerary:', error);
+      setQuestionnaireError(error.message || 'Failed to generate itinerary');
     }
   };
 
