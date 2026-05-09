@@ -54,15 +54,6 @@
     box-shadow: 0 6px 12px rgba(245, 87, 108, 0.4);
 }
 
-.trippi-btn {
-    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-}
-
-.trippi-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 12px rgba(79, 172, 254, 0.4);
-}
-
 .logout-btn {
     padding: 0.75rem 1.5rem;
     font-size: 0.95rem;
