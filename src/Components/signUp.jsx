@@ -19,7 +19,7 @@ function SignUp({ toggleForm, onLogin }) {
         
         try {
             // Sign up the user with Supabase Auth
-            const { data, error: signUpError } = await supabase.auth.signUp({
+            const { error: signUpError } = await supabase.auth.signUp({
                 email: email,
                 password: password,
                 options: {
@@ -45,7 +45,7 @@ function SignUp({ toggleForm, onLogin }) {
             setPhone('');
             
         } catch (error) {
-            setError(error.message || 'An error occurred during registration');
+            setError(error.message || 'Unable to create your account. Check the required fields and try again.');
             console.error('Sign Up Error:', error);
         } finally {
             setLoading(false);
@@ -156,7 +156,7 @@ function SignUp({ toggleForm, onLogin }) {
                             <h3>Registration Complete! ✓</h3>
                         </div>
                         <div className="modal-body">
-                            <p>Please verify your account in your email address.</p>
+                            <p>Please verify your account from the email we sent.</p>
                             <p className="modal-subtext">We've sent a verification link to <strong>{email}</strong></p>
                         </div>
                         <div className="modal-footer">

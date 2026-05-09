@@ -1,46 +1,90 @@
-# TrippyAI
+# TripAI / TrippyAI
 
-This capstone project is a Travel Website using React that utilizes AI Agents to generate a Iternaray for the user.
+TripAI is a React and Flask travel-planning app. It supports Supabase authentication, onboarding and trip questionnaires, saved trip requests, OpenAI-backed itinerary generation and refinement, itinerary version history, trip-scoped Trippy chat, maps, weather, flights, hotels, attractions, and account/profile settings.
 
 ## Developers
 
-David Barrios
+David Barrios, Daniel Marinca, Dean Martin Solideo, and Aidan Wallis.
 
-Daniel Marinca
+## Local Setup
 
-Dean Martin Solideo
+Install Node dependencies from the repo root:
 
-Aidan Wallis
+```bash
+npm install
+```
 
-### `npm start`
+Install backend dependencies in your Python environment:
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+```bash
+pip install -r backend/requirements.txt
+```
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+Create a local `.env` file for credentials and service URLs:
 
-### `npm test`
+```env
+REACT_APP_SUPABASE_URL=your_supabase_project_url
+REACT_APP_SUPABASE_ANON_KEY=your_supabase_anon_key
+REACT_APP_GOOGLE_MAPS_API_KEY=your_google_maps_key
+REACT_APP_SERPAPI_KEY=your_serpapi_key
+OPENAI_API_KEY=your_openai_key
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+# Required only for account deletion from the settings page
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 
-### `npm run build`
+# Optional local overrides
+REACT_APP_TRIPPY_API_URL=http://localhost:5000
+REACT_APP_SERPAPI_PROXY_URL=http://localhost:5051/serpapi
+TRIPPY_BACKEND_PORT=5000
+SERPAPI_PROXY_PORT=5051
+OPENAI_MODEL=gpt-3.5-turbo
+```
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+`REACT_APP_TRIPPI_API_URL` is still supported as a fallback for older local `.env` files, but new setup should use `REACT_APP_TRIPPY_API_URL`.
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## Run The App
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+Use the full development stack for normal work:
 
-### `npm run eject`
+```bash
+npm run dev
+```
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+This starts:
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+- React app: http://localhost:3000
+- Trippy Flask backend: http://localhost:5000
+- SerpApi proxy: http://localhost:5051
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+You can also run services individually:
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+```bash
+npm start
+npm run chatbot-backend
+npm run serpapi-proxy
+```
+
+## Supabase Data Model
+
+The app expects these Supabase tables:
+
+- `userProfiles`
+- `traveler_preferences`
+- `trip_requests`
+- `itineraries`
+- `itinerary_versions`
+- `chat_sessions`
+- `chat_messages`
+- `itinerary_feedback`
+
+It also expects a `profile-pictures` storage bucket for profile avatars. The current app stores the active itinerary snapshot in `itineraries` and version history in `itinerary_versions`; removed model/source metadata columns are not required by the frontend.
+
+## Validation
+
+Build the frontend:
+
+```bash
+npm run build
+```
+
+The default Create React App sample test was removed because it did not cover TripAI behavior. Add focused tests for auth, questionnaire submission, itinerary persistence, or travel-data rendering before relying on `npm test` as a real regression gate.

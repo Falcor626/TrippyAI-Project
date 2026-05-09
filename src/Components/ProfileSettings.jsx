@@ -30,6 +30,24 @@ const COUNTRIES = [
     'Yemen', 'Zambia', 'Zimbabwe'
 ];
 
+const INTERESTS = [
+    { id: 'adventure', label: 'Adventure' },
+    { id: 'culture', label: 'Culture' },
+    { id: 'food', label: 'Food & Drink' },
+    { id: 'nature', label: 'Nature' },
+    { id: 'nightlife', label: 'Nightlife' },
+    { id: 'relaxation', label: 'Relaxation' },
+    { id: 'shopping', label: 'Shopping' },
+    { id: 'photography', label: 'Photography' },
+];
+
+const BUDGETS = [
+    { id: 'budget', label: 'Budget', sub: 'Under $1,000' },
+    { id: 'moderate', label: 'Moderate', sub: '$1,000 - $3,000' },
+    { id: 'comfort', label: 'Comfort', sub: '$3,000 - $7,000' },
+    { id: 'luxury', label: 'Luxury', sub: '$7,000+' },
+];
+
 function ProfileSettings({ toggleProfile, onAvatarUpdate }) {
     const [username, setUsername] = useState('');
     const [fullName, setFullName] = useState('');
@@ -41,7 +59,11 @@ function ProfileSettings({ toggleProfile, onAvatarUpdate }) {
     const [previewUrl, setPreviewUrl] = useState(null);
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState('');
+    const [successMessage, setSuccessMessage] = useState('');
     const [isLoading, setIsLoading] = useState(true);
+    const [preferredDepartureCity, setPreferredDepartureCity] = useState('');
+    const [preferredBudget, setPreferredBudget] = useState('');
+    const [preferredInterests, setPreferredInterests] = useState([]);
 
     // Load user profile data on component mount
     useEffect(() => {
@@ -74,6 +96,22 @@ function ProfileSettings({ toggleProfile, onAvatarUpdate }) {
                     if (profile.pronouns) setPronouns(profile.pronouns);
                     if (profile.country) setCountry(profile.country);
                     if (profile.avatar_url) setPreviewUrl(profile.avatar_url);
+                }
+
+                const { data: preferences, error: preferencesError } = await supabase
+                    .from('traveler_preferences')
+                    .select('preferred_departure_city, preferred_budget, preferred_interests')
+                    .eq('user_id', user.id)
+                    .maybeSingle();
+
+                if (preferencesError) {
+                    console.warn('Error loading traveler preferences:', preferencesError.message);
+                }
+
+                if (preferences) {
+                    setPreferredDepartureCity(preferences.preferred_departure_city || '');
+                    setPreferredBudget(preferences.preferred_budget || '');
+                    setPreferredInterests(preferences.preferred_interests || []);
                 }
             } catch (err) {
                 console.error('Failed to load profile:', err);
@@ -123,6 +161,14 @@ function ProfileSettings({ toggleProfile, onAvatarUpdate }) {
         }
     };
 
+    const togglePreferredInterest = (interestId) => {
+        setPreferredInterests((current) =>
+            current.includes(interestId)
+                ? current.filter((id) => id !== interestId)
+                : [...current, interestId]
+        );
+    };
+
     const handleRemoveImage = async () => {
         setProfileImage(null);
         setPreviewUrl(null);
@@ -155,6 +201,7 @@ function ProfileSettings({ toggleProfile, onAvatarUpdate }) {
 
 const handleSave = async () => {
   setError('');
+  setSuccessMessage('');
   setUploading(true);
   let imageUrl = null;
 
@@ -207,10 +254,25 @@ const handleSave = async () => {
       throw saveError;
     }
 
+    const { error: preferencesSaveError } = await supabase.from('traveler_preferences').upsert(
+      {
+        user_id: user.id,
+        preferred_departure_city: preferredDepartureCity.trim() || null,
+        preferred_budget: preferredBudget || null,
+        preferred_interests: preferredInterests,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id' }
+    );
+
+    if (preferencesSaveError) {
+      throw preferencesSaveError;
+    }
+
     // savedRows contains the resulting row (id, avatar_url, etc.)
     console.info('Saved profile row:', savedRows);
 
-    alert('Profile updated successfully!');
+    setSuccessMessage('Profile and travel preferences updated.');
     
     // Update parent component's avatar state
     if (onAvatarUpdate) {
@@ -239,6 +301,7 @@ const handleSave = async () => {
             ) : (
                 <>
                     {error && <div className="error-message">{error}</div>}
+                    {successMessage && <div className="success-message">{successMessage}</div>}
                     <div className="profile-section">
                         <div className="profile-picture-item">
                             <label>Profile Picture:</label>
@@ -318,6 +381,61 @@ const handleSave = async () => {
                                         ))}
                                     </ul>
                                 )}
+                            </div>
+                        </div>
+
+                        <div className="traveler-preferences-section">
+                            <div>
+                                <h3>Traveler Preferences</h3>
+                                <p>These defaults are loaded when you start a new trip.</p>
+                            </div>
+
+                            <div className="profile-item">
+                                <label htmlFor="preferredDepartureCity">Default Departure City:</label>
+                                <input
+                                    type="text"
+                                    id="preferredDepartureCity"
+                                    name="preferredDepartureCity"
+                                    placeholder="e.g. Los Angeles, CA"
+                                    value={preferredDepartureCity}
+                                    onChange={(e) => setPreferredDepartureCity(e.target.value)}
+                                    disabled={uploading}
+                                />
+                            </div>
+
+                            <div className="profile-item">
+                                <label>Preferred Budget:</label>
+                                <div className="preference-budget-grid">
+                                    {BUDGETS.map((budget) => (
+                                        <button
+                                            key={budget.id}
+                                            type="button"
+                                            className={`preference-option ${preferredBudget === budget.id ? 'preference-option-selected' : ''}`}
+                                            onClick={() => setPreferredBudget(budget.id)}
+                                            disabled={uploading}
+                                        >
+                                            <span>{budget.label}</span>
+                                            <small>{budget.sub}</small>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="profile-item">
+                                <label>Preferred Interests:</label>
+                                <div className="preference-interest-grid">
+                                    {INTERESTS.map((interest) => (
+                                        <button
+                                            key={interest.id}
+                                            type="button"
+                                            className={`preference-option ${preferredInterests.includes(interest.id) ? 'preference-option-selected' : ''}`}
+                                            onClick={() => togglePreferredInterest(interest.id)}
+                                            disabled={uploading}
+                                        >
+                                            {interest.label}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
                         </div>
                     </div>

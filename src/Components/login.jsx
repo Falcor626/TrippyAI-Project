@@ -32,7 +32,7 @@ function Login({ toggleForm, onLogin }) {
                 setPassword('');
             }
         } catch (err) {
-            setError(err.message || 'Failed to login');
+            setError(err.message || 'Unable to log in. Check your email and password, then try again.');
             console.error('Login Error:', err);
         } finally {
             setLoading(false);
@@ -72,7 +72,7 @@ function Login({ toggleForm, onLogin }) {
             const { error: resetError } = await supabase.auth.resetPasswordForEmail(
                 forgotPasswordEmail,
                 {
-                    redirectTo: `${window.location.origin}`
+                    redirectTo: `${window.location.origin}?reset-password=1`
                 }
             );
 
@@ -129,7 +129,7 @@ function Login({ toggleForm, onLogin }) {
                 </div>
                 <div className="button-group">
                     <button type="submit" disabled={loading}>
-                        {loading ? 'Logging in...' : 'Submit'}
+                        {loading ? 'Logging in...' : 'Log In'}
                     </button>
                     <button type="button" className="secondary-button" onClick={toggleForm} disabled={loading}>
                         Sign Up
@@ -137,7 +137,7 @@ function Login({ toggleForm, onLogin }) {
                 </div>
                 <div className="forgot-password">
                     <button type="button" className="forgot-password-btn" onClick={openForgotPasswordModal} disabled={loading}>
-                        Forgot Password
+                        Forgot password?
                     </button>
                 </div>
             </form>
