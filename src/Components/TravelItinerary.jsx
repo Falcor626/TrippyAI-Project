@@ -2233,7 +2233,7 @@ function TravelItinerary({
                         <div>
                           <div className="version-item-heading">
                             <strong>{buildVersionSummaryLabel(version)}</strong>
-                            {isCurrentVersion && <span className="version-current-badge">Current</span>}
+                            {isCurrentVersion && <span className="version-current-badge">Active</span>}
                           </div>
                           <p className="version-meta">
                             {formatDateTime(version.created_at)}

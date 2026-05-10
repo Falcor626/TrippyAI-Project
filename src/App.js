@@ -132,6 +132,24 @@ function setTripMetaCache(tripId, meta) {
   }
 }
 
+function getMatchingItineraryVersionId(versions = [], itinerary = null) {
+  if (!itinerary) {
+    return versions[0]?.id || '';
+  }
+
+  try {
+    const currentItineraryJson = JSON.stringify(itinerary);
+    const matchingVersion = versions.find(
+      (version) => JSON.stringify(version.itinerary_json) === currentItineraryJson
+    );
+
+    return matchingVersion?.id || versions[0]?.id || '';
+  } catch (error) {
+    console.warn('[getMatchingItineraryVersionId] Error:', error.message);
+    return versions[0]?.id || '';
+  }
+}
+
 function enrichTripWithMeta(trip) {
   if (!trip) {
     return trip;
@@ -675,7 +693,7 @@ function App() {
     }
   };
 
-  const loadItineraryVersions = async (tripId) => {
+  const loadItineraryVersions = async (tripId, currentItinerary = null) => {
     if (!tripId) {
       setItineraryVersions([]);
       setActiveVersionId('');
@@ -698,7 +716,7 @@ function App() {
 
       const versions = await getItineraryVersions(user.id, tripId);
       setItineraryVersions(versions);
-      setActiveVersionId(versions[0]?.id || '');
+      setActiveVersionId(getMatchingItineraryVersionId(versions, currentItinerary));
       return versions;
     } catch (error) {
       console.warn('Unable to load itinerary versions:', error.message);
@@ -845,7 +863,7 @@ function App() {
 
       if (isEditingExistingTrip) {
         const currentItinerary = await getCurrentItinerary(user.id, savedTrip.id);
-        await loadItineraryVersions(savedTrip.id);
+        await loadItineraryVersions(savedTrip.id, currentItinerary?.itinerary_json || null);
         setActiveTrip({
           ...savedTrip,
           itinerary: currentItinerary?.itinerary_json || null,
@@ -860,7 +878,7 @@ function App() {
       try {
         const { itinerary } = await generateItinerary(savedTrip);
         await saveItinerary(user.id, savedTrip.id, itinerary, savedTrip);
-        await loadItineraryVersions(savedTrip.id);
+        await loadItineraryVersions(savedTrip.id, itinerary);
         setActiveTrip({
           ...savedTrip,
           itinerary,
@@ -918,7 +936,7 @@ function App() {
 
       const currentItinerary = await getCurrentItinerary(user.id, selectedTrip.id);
       await Promise.all([
-        loadItineraryVersions(selectedTrip.id),
+        loadItineraryVersions(selectedTrip.id, currentItinerary?.itinerary_json || null),
         loadTripChatMessages(selectedTrip.id),
       ]);
       if (currentItinerary?.itinerary_json) {
@@ -977,7 +995,7 @@ function App() {
 
       const { itinerary } = await generateItinerary(activeTrip);
       await saveItinerary(user.id, activeTrip.id, itinerary, activeTrip);
-      await loadItineraryVersions(activeTrip.id);
+      await loadItineraryVersions(activeTrip.id, itinerary);
 
       const now = new Date().toISOString();
       const { error: tripUpdateError } = await supabase
@@ -1018,7 +1036,7 @@ function App() {
     };
 
     await saveItinerary(user.id, tripForRefinement.id, itinerary, tripForRefinement);
-    await loadItineraryVersions(tripForRefinement.id);
+    await loadItineraryVersions(tripForRefinement.id, itinerary);
 
     const now = new Date().toISOString();
     const { error: tripUpdateError } = await supabase
@@ -1185,7 +1203,7 @@ function App() {
       };
 
       await saveItinerary(user.id, updatedTrip.id, itinerary, updatedTrip);
-      await loadItineraryVersions(updatedTrip.id);
+      await loadItineraryVersions(updatedTrip.id, itinerary);
 
       const now = new Date().toISOString();
       const { error: tripUpdateError } = await supabase
@@ -1363,12 +1381,7 @@ function App() {
 
       const selectedVersion = await getItineraryVersionById(user.id, activeTrip.id, version.id);
       const now = new Date().toISOString();
-      const restoredItinerary = {
-        ...selectedVersion.itinerary_json,
-        summary:
-          selectedVersion.itinerary_json?.summary ||
-          `Restored from version ${selectedVersion.version_number}.`,
-      };
+      const restoredItinerary = selectedVersion.itinerary_json;
 
       const restoredRecord = await restoreItinerarySnapshot(
         user.id,
@@ -1424,8 +1437,8 @@ function App() {
         travelerCount: restoredTrip.travelerCount,
       });
 
-      const versions = await loadItineraryVersions(activeTrip.id);
-      setActiveVersionId(restoredRecord?.restored_version?.id || versions[0]?.id || '');
+      await loadItineraryVersions(activeTrip.id, restoredRecord?.itinerary_json || restoredItinerary);
+      setActiveVersionId(selectedVersion.id);
     } catch (error) {
       console.error('Restore itinerary version error:', error);
       setItineraryVersionsError(error?.message || 'Unable to restore that itinerary version.');
