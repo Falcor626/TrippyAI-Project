@@ -492,21 +492,40 @@ const buildTripMetadataChange = (message = '', trip = {}) => {
   }
 
   const travelerCountValue = String.raw`(\d+|one|two|three|four|five|six|seven|eight|nine|ten)`;
+  const travelerCountValueOptional = String.raw`(\d+|one|two|three|four|five|six|seven|eight|nine|ten|a|an)?`;
   const explicitTravelerMatch = normalized.match(new RegExp(`\\b(?:change|make|set|update).{0,24}?\\b(?:to\\s+)?${travelerCountValue}\\s+(?:travelers?|people|persons?)\\b`));
   const assignedTravelerMatch = normalized.match(new RegExp(`\\b(?:traveler\\s*count|travelers?|people|party\\s*size|group\\s*size)\\s*(?:is|=|to|as|:)?\\s*${travelerCountValue}\\b`));
   const partyTravelerMatch = normalized.match(new RegExp(`\\b(?:party|group)\\s+of\\s+${travelerCountValue}\\b`));
   const thereWillBeTravelerMatch = normalized.match(new RegExp(`\\bthere\\s+(?:will\\s+be|are|is)\\s+${travelerCountValue}\\s+(?:of\\s+us|travelers?|people|persons?)\\b`));
-  const directTravelerMatch = normalized.match(new RegExp(`\\b${travelerCountValue}\\s+(?:travelers?|people|persons?)\\b`));
+  const directTravelerUpdateMatch = normalized.match(new RegExp(`\\b(?:make|change|set|update).{0,24}?\\b${travelerCountValue}\\s+(?:travelers?|people|persons?)\\b`));
   const addTravelerMatch = normalized.match(/\b(?:add|adding|bringing|bring|include|including|invite|inviting).{0,28}?\b(?:additional|another|extra|more|a|an|one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+(?:travelers?|persons?|people|guests?)\b/);
   const oneMoreTravelerMatch = normalized.match(/\b(?:one|1|a|an)\s+more\s+(?:traveler|person|guest)\b/);
   const fewerTravelerMatch = normalized.match(/\b(?:remove|drop|subtract|one fewer|1 fewer|fewer|less).{0,28}?\b(?:one|two|three|four|five|six|seven|eight|nine|ten|\d+)?\s*(?:travelers?|persons?|people|guests?)\b/);
-  const setTravelerMatch = explicitTravelerMatch || assignedTravelerMatch || partyTravelerMatch || thereWillBeTravelerMatch;
+  const increaseTravelerCountMatch =
+    normalized.match(new RegExp(`\\b(?:increase|raise|bump)\\s+(?:the\\s+)?(?:traveler\\s*count|travelers?|people|party\\s*size|group\\s*size)\\s+(?:by\\s+)?${travelerCountValueOptional}\\b`)) ||
+    normalized.match(new RegExp(`\\b(?:add|plus)\\s+${travelerCountValueOptional}\\s+(?:to\\s+)?(?:the\\s+)?(?:traveler\\s*count|travelers?|people|party\\s*size|group\\s*size)\\b`));
+  const decreaseTravelerCountMatch =
+    normalized.match(new RegExp(`\\b(?:decrease|reduce|lower)\\s+(?:the\\s+)?(?:traveler\\s*count|travelers?|people|party\\s*size|group\\s*size)\\s+(?:by\\s+)?${travelerCountValueOptional}\\b`)) ||
+    normalized.match(new RegExp(`\\b(?:remove|drop|subtract|minus)\\s+${travelerCountValueOptional}\\s+(?:from\\s+)?(?:the\\s+)?(?:traveler\\s*count|travelers?|people|party\\s*size|group\\s*size)\\b`));
+  const setTravelerMatch = explicitTravelerMatch || assignedTravelerMatch || partyTravelerMatch || thereWillBeTravelerMatch || directTravelerUpdateMatch;
 
   if (setTravelerMatch || /\b(?:make|change|set|update).{0,24}?\b(?:solo|alone)\b/.test(normalized)) {
     const count = setTravelerMatch ? getNumberFromText(setTravelerMatch[1]) : 1;
     if (count && count !== currentTravelerCount) {
       changes.travelerCount = count;
       details.travelers = { current: currentTravelerCount, next: count };
+    }
+  } else if (increaseTravelerCountMatch) {
+    const amount = getNumberFromText(increaseTravelerCountMatch[1] || 'one') || 1;
+    changes.travelerCount = currentTravelerCount + amount;
+    details.travelers = { current: currentTravelerCount, next: changes.travelerCount };
+  } else if (decreaseTravelerCountMatch) {
+    const amount = getNumberFromText(decreaseTravelerCountMatch[1] || 'one') || 1;
+    changes.travelerCount = Math.max(1, currentTravelerCount - amount);
+    if (changes.travelerCount !== currentTravelerCount) {
+      details.travelers = { current: currentTravelerCount, next: changes.travelerCount };
+    } else {
+      delete changes.travelerCount;
     }
   } else if (addTravelerMatch || oneMoreTravelerMatch || /\b(?:another|additional|extra|one more)\s+(?:person|traveler|guest)\b/.test(normalized)) {
     const amount = addTravelerMatch ? getNumberFromText(addTravelerMatch[0]) || 1 : 1;
@@ -519,12 +538,6 @@ const buildTripMetadataChange = (message = '', trip = {}) => {
       details.travelers = { current: currentTravelerCount, next: changes.travelerCount };
     } else {
       delete changes.travelerCount;
-    }
-  } else if (directTravelerMatch && /\btravelers?|people|persons?\b/.test(normalized)) {
-    const count = getNumberFromText(directTravelerMatch[1]);
-    if (count && count !== currentTravelerCount) {
-      changes.travelerCount = count;
-      details.travelers = { current: currentTravelerCount, next: count };
     }
   }
 
@@ -2233,7 +2246,7 @@ function TravelItinerary({
                         <div>
                           <div className="version-item-heading">
                             <strong>{buildVersionSummaryLabel(version)}</strong>
-                            {isCurrentVersion && <span className="version-current-badge">Current</span>}
+                            {isCurrentVersion && <span className="version-current-badge">Active</span>}
                           </div>
                           <p className="version-meta">
                             {formatDateTime(version.created_at)}

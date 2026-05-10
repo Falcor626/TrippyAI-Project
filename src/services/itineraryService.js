@@ -435,20 +435,6 @@ export const restoreItinerarySnapshot = async (userId, tripRequestId, itinerary,
     throw new Error('No current itinerary record was found to restore.');
   }
 
-  const { data: latestVersion, error: versionError } = await supabase
-    .from('itinerary_versions')
-    .select('version_number')
-    .eq('itinerary_id', existingItinerary.id)
-    .order('version_number', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (versionError && versionError.code !== 'PGRST116') {
-    throw versionError;
-  }
-
-  const versionNumber = (latestVersion?.version_number || 0) + 1;
-
   const fallbackSnapshot = {
     ...(existingItinerary.questionnaire_data || {}),
     planName: existingItinerary.questionnaire_data?.planName || existingItinerary.plan_name || trip.planName,
@@ -462,16 +448,12 @@ export const restoreItinerarySnapshot = async (userId, tripRequestId, itinerary,
     ...fallbackSnapshot,
     ...restoredTripSnapshot,
   };
-  const restoredItinerary = {
-    ...itinerary,
-    tripSnapshot,
-  };
 
   const { data, error } = await supabase
     .from('itineraries')
     .update({
-      summary: restoredItinerary.summary || null,
-      itinerary_json: restoredItinerary,
+      summary: itinerary.summary || null,
+      itinerary_json: itinerary,
       ...itineraryMeta,
       questionnaire_data: tripSnapshot,
       travelers: Number(tripSnapshot.travelerCount) || itineraryMeta.travelers,
@@ -486,24 +468,7 @@ export const restoreItinerarySnapshot = async (userId, tripRequestId, itinerary,
     throw error;
   }
 
-  const { data: versionData, error: versionInsertError } = await supabase
-    .from('itinerary_versions')
-    .insert({
-      itinerary_id: existingItinerary.id,
-      version_number: versionNumber,
-      itinerary_json: restoredItinerary,
-    })
-    .select()
-    .single();
-
-  if (versionInsertError) {
-    throw versionInsertError;
-  }
-
-  return {
-    ...data,
-    restored_version: versionData,
-  };
+  return data;
 };
 
 export const renameTripPlan = async (userId, tripRequestId, planName) => {
